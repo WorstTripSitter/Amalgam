@@ -299,23 +299,20 @@ void CGlow::SetupEnd(Glow_t glow, IMatRenderContext* pRenderContext, IMaterial* 
 	I::ModelRender->ForcedMaterialOverride(nullptr);
 }
 
-void CGlow::DrawModel(CBaseEntity* pEntity, bool bModel)
+void CGlow::DrawModel(CBaseEntity* pEntity)
 {
 	m_bRendering = true;
 
-	/*
 	if (pEntity->IsPlayer())
 	{
-		auto pPlayer = pEntity->As<CTFPlayer>();
+		const auto Player = pEntity->As<CTFPlayer>();
+		const auto OldInvisibility = Player->m_flInvisibility();
 
-		float flOldInvisibility = pPlayer->m_flInvisibility();
-		pPlayer->m_flInvisibility() = 0.f;
-
+		Player->m_flInvisibility() = 0.f;
 		pEntity->DrawModel(STUDIO_RENDER | STUDIO_NOSHADOWS);
-		
-		pPlayer->m_flInvisibility() = flOldInvisibility;
+		Player->m_flInvisibility() = OldInvisibility;
 	}
-	else*/
+	else
 		pEntity->DrawModel(STUDIO_RENDER | STUDIO_NOSHADOWS);
 
 	m_bRendering = false;
@@ -393,7 +390,7 @@ void CGlow::RenderMain()
 		for (auto& tInfo : vInfo)
 		{
 			m_bExtra = tInfo.m_bExtra;
-			DrawModel(tInfo.m_pEntity, true);
+			DrawModel(tInfo.m_pEntity);
 			m_bExtra = false;
 		}
 
@@ -403,7 +400,7 @@ void CGlow::RenderMain()
 			I::RenderView->SetColorModulation(tInfo.m_cColor.r / 255.f, tInfo.m_cColor.g / 255.f, tInfo.m_cColor.b / 255.f);
 			I::RenderView->SetBlend(tInfo.m_cColor.a / 255.f);
 			m_bExtra = tInfo.m_bExtra;
-			DrawModel(tInfo.m_pEntity, false);
+			DrawModel(tInfo.m_pEntity);
 			m_bExtra = false;
 		}
 
