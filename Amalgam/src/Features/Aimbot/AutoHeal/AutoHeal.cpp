@@ -6,17 +6,17 @@
 #include "../../Simulation/ProjectileSimulation/ProjectileSimulation.h"
 #include "../AimbotProjectile/AimbotProjectile.h"
 
-void CAutoHeal::ActivateOnVoice(CTFPlayer* pLocal, CWeaponMedigun* pWeapon, CUserCmd* pCmd)
+void CAutoHeal::ActivateOnVoiceCommand(CWeaponMedigun* LocalMedigun, CUserCmd* UserCommand) const
 {
 	if (!Vars::Aimbot::Healing::ActivateOnVoice.Value)
 		return;
 
-	auto pTarget = pWeapon->m_hHealingTarget().Get();
-	if (!pTarget || Vars::Aimbot::Healing::FriendsOnly.Value && !H::Entities.IsFriend(pTarget->entindex()) && !H::Entities.InParty(pTarget->entindex()))
+	const auto Target = LocalMedigun->m_hHealingTarget().Get();
+	if (!Target || Vars::Aimbot::Healing::FriendsOnly.Value && !H::Entities.IsFriend(Target->entindex()) && !H::Entities.InParty(Target->entindex()))
 		return;
 
-	if (m_mMedicCallers.contains(pTarget->entindex()))
-		pCmd->buttons |= IN_ATTACK2;
+	if (m_mMedicCallers.contains(Target->entindex()))
+		UserCommand->buttons |= IN_ATTACK2;
 }
 
 static inline Vec3 PredictOrigin(Vec3& vOrigin, Vec3 vVelocity, float flLatency, bool bTrace = true, Vec3 vMins = {}, Vec3 vMaxs = {}, unsigned int nMask = MASK_SOLID, float flNormal = 0.f)
@@ -607,7 +607,7 @@ void CAutoHeal::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd)
 		return;
 	}
 
-	ActivateOnVoice(pLocal, pWeapon->As<CWeaponMedigun>(), pCmd);
+	ActivateOnVoiceCommand(pWeapon->As<CWeaponMedigun>(), pCmd);
 	m_mMedicCallers.clear();
 	
 	AutoVaccinator(pLocal, pWeapon->As<CWeaponMedigun>(), pCmd);

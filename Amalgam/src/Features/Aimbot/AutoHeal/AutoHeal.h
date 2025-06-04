@@ -5,7 +5,7 @@
 
 class CAutoHeal
 {
-	void ActivateOnVoice(CTFPlayer* pLocal, CWeaponMedigun* pWeapon, CUserCmd* pCmd);
+	void ActivateOnVoiceCommand(CWeaponMedigun* LocalMedigun, CUserCmd* UserCommand) const;
 	void AutoVaccinator(CTFPlayer* pLocal, CWeaponMedigun* pWeapon, CUserCmd* pCmd);
 	void GetDangers(CTFPlayer* pTarget, bool bVaccinator, float& flBulletDanger, float& flBlastDanger, float& flFireDanger);
 	void SwapResistType(CUserCmd* pCmd, int iType);
