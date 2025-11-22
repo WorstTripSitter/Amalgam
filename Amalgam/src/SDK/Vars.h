@@ -390,7 +390,9 @@ namespace Vars
 			CVar(AutoBackstab, "Auto backstab", true);
 			CVar(IgnoreRazorback, "Ignore razorback", true);
 			CVar(SwingPrediction, "Swing prediction", false);
-			CVar(WhipTeam, "Whip team", false);
+			CVar(AdvancedDisciplinaryAction, "Advanced Disciplinary Action", false);
+			CVar(AdvancedDisciplinaryActionFriendsOnly, "Friends Only", false);
+			CVar(AdvancedDisciplinaryActionIgnoreSpeedBoosted, "Ignore Speed Boosted", false);
 
 			CVar(SwingOffset, "Swing offset", -1, NOSAVE | DEBUGVAR, -1, 1);
 			CVar(SwingPredictLag, "Swing predict lag", true, NOSAVE | DEBUGVAR);

@@ -16,14 +16,22 @@ std::vector<Target_t> CAimbotMelee::GetTargets(CTFPlayer* pLocal, CTFWeaponBase*
 	if (Vars::Aimbot::General::Target.Value & Vars::Aimbot::General::TargetEnum::Players)
 	{
 		auto eGroupType = !F::AimbotGlobal.FriendlyFire() || Vars::Aimbot::General::Ignore.Value & Vars::Aimbot::General::IgnoreEnum::Team ? EntityEnum::PlayerEnemy : EntityEnum::PlayerAll;
-		if (Vars::Aimbot::Melee::WhipTeam.Value &&
+		if (Vars::Aimbot::Melee::AdvancedDisciplinaryAction.Value &&
 			!F::AimbotGlobal.FriendlyFire() && SDK::AttribHookValue(0, "speed_buff_ally", pWeapon) > 0)
 			eGroupType = EntityEnum::PlayerAll;
 
 		for (auto pEntity : H::Entities.GetGroup(eGroupType))
 		{
 			if (F::AimbotGlobal.ShouldIgnore(pEntity, pLocal, pWeapon))
-				continue;
+				continue;z
+
+			const auto Player = pEntity->As<CTFPlayer>();
+
+			if (Player->m_iTeamNum() == pLocal->m_iTeamNum())
+			{
+				if (Vars::Aimbot::Melee::AdvancedDisciplinaryActionIgnoreSpeedBoosted.Value && Player->InCond(TF_COND_SPEED_BOOST))
+					continue;
+			}
 
 			float flFOVTo; Vec3 vPos, vAngleTo;
 			if (!F::AimbotGlobal.PlayerBoneInFOV(pEntity->As<CTFPlayer>(), vLocalPos, vLocalAngles, flFOVTo, vPos, vAngleTo))
