@@ -14,16 +14,13 @@ MAKE_HOOK(CClientModeShared_DoPostScreenSpaceEffects, U::Memory.GetVirtual(I::Cl
 		return CALL_ORIGINAL(rcx, pSetup);
 #endif
 
-	if (Vars::Visuals::UI::CleanScreenshots.Value && I::EngineClient->IsTakingScreenshot())
+	if (SDK::CleanScreenshot())
 		return CALL_ORIGINAL(rcx, pSetup);
 
 	auto pLocal = H::Entities.GetLocal();
 	auto pWeapon = H::Entities.GetWeapon();
 	if (pLocal && pWeapon)
-	{
-		F::Visuals.SplashRadius(pLocal);
 		F::Visuals.ProjectileTrace(pLocal, pWeapon);
-	}
 
 	if (!F::CameraWindow.m_bDrawing)
 	{
