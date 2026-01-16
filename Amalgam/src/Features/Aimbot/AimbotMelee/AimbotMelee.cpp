@@ -38,7 +38,7 @@ static inline std::vector<Target_t> GetTargets(CTFPlayer* pLocal, CTFWeaponBase*
 		for (auto pEntity : H::Entities.GetGroup(eGroupType))
 		{
 			if (F::AimbotGlobal.ShouldIgnore(pEntity, pLocal, pWeapon))
-				continue;z
+				continue;
 
 			const auto Player = pEntity->As<CTFPlayer>();
 
