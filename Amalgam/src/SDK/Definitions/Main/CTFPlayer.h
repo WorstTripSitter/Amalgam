@@ -221,6 +221,11 @@ public:
 	bool IsMarked();
 	bool CanAttack(bool bCloak = true, bool bLocal = true);
 	float GetCritMult();
+
+	bool IsSpy()
+	{
+		return m_iClass() == TF_CLASS_SPY;
+	}
 };
 
 class CTFRagdoll : public CBaseFlex
