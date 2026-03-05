@@ -110,6 +110,12 @@ bool CTFPlayer::IsUbered()
 
 bool CTFPlayer::IsCritBoosted()
 {
+	if (const auto Weapon = m_hActiveWeapon()->As<CTFWeaponBase>())
+   {
+	   if (Weapon->m_iItemDefinitionIndex() == Soldier_t_TheMarketGardener && InCond(TF_COND_BLASTJUMPING))
+		   return true;
+   }
+
 	return InCond(TF_COND_CRITBOOSTED)
 		|| InCond(TF_COND_CRITBOOSTED_PUMPKIN)
 		|| InCond(TF_COND_CRITBOOSTED_USER_BUFF)
