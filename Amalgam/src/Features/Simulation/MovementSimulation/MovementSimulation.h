@@ -4,6 +4,8 @@
 
 Enum(Move, Ground, Air, Swim)
 
+using RunTickCallback = const std::function<void(CMoveData&)>;
+
 struct MoveStorage
 {
 	CTFPlayer* m_pPlayer = nullptr;
@@ -42,9 +44,9 @@ private:
 	void Store(MoveStorage& tMoveStorage);
 	void Reset(MoveStorage& tMoveStorage);
 
-	bool SetupMoveData(MoveStorage& tMoveStorage);
+	void SetupMoveData(MoveStorage& tMoveStorage);
 	void GetAverageYaw(MoveStorage& tMoveStorage, int iSamples);
-	bool StrafePrediction(MoveStorage& tMoveStorage, int iSamples);
+	bool StrafePrediction(MoveStorage& tMoveStorage, bool bHitchance = false);
 
 	void SetBounds(CTFPlayer* pPlayer);
 	void RestoreBounds(CTFPlayer* pPlayer);
@@ -58,11 +60,12 @@ private:
 
 public:
 	void Store();
+	void StorePlayer(CTFPlayer* pPlayer, CMoveData& tMoveData, float flTime);
 
 	bool Initialize(CBaseEntity* pEntity, MoveStorage& tMoveStorage, bool bHitchance = true, bool bStrafe = true);
 	bool SetDuck(MoveStorage& tMoveStorage, bool bDuck);
-	void RunTick(MoveStorage& tMoveStorage, bool bPath = true, std::function<void(CMoveData&)>* pCallback = nullptr);
-	void RunTick(MoveStorage& tMoveStorage, bool bPath, std::function<void(CMoveData&)> fCallback);
+	void RunTick(MoveStorage& tMoveStorage, bool bPath = true, RunTickCallback* pCallback = nullptr);
+	void RunTick(MoveStorage& tMoveStorage, bool bPath, RunTickCallback fCallback);
 	void Restore(MoveStorage& tMoveStorage);
 
 	float GetPredictedDelta(CBaseEntity* pEntity);

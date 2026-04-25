@@ -198,6 +198,7 @@
 #define TF_ROCKET_RADIUS (146.f)
 #define TF_FLARE_DET_RADIUS (110.f)
 #define TF_FLARE_RADIUS_FOR_FJS (100.f)
+#define JAR_EXPLODE_RADIUS (200.f)
 
 #define TF_PLAYER_VIEW_OFFSET Vector( 0, 0, 64.0 )
 #define TF_BURNING_FREQUENCY 0.5f
@@ -1214,11 +1215,6 @@ enum
 };
 
 class CBaseEntity;
-
-struct CUtlString
-{
-	char* m_pString;
-};
 
 struct FireBulletsInfo_t
 {

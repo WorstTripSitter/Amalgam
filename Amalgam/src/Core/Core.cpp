@@ -7,6 +7,7 @@
 #include "../Features/EnginePrediction/EnginePrediction.h"
 #include "../Features/Visuals/Materials/Materials.h"
 #include "../Features/Visuals/Visuals.h"
+#include "../Features/Spectate/Spectate.h"
 #include "../SDK/Events/Events.h"
 #include <Psapi.h>
 
@@ -112,7 +113,7 @@ void CCore::Load()
 	if (m_bUnload = m_bFailed2 = !U::Hooks.Initialize() || !U::BytePatches.Initialize() || !H::Events.Initialize())
 		return;
 	F::Materials.LoadMaterials();
-	H::Fonts.Reload(Vars::Menu::Scale[DEFAULT_BIND]);
+	H::Fonts.Reload();
 	F::Configs.LoadConfig(F::Configs.m_sCurrentConfig, false);
 
 	SDK::Output("Amalgam", "Loaded", DEFAULT_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG);
@@ -122,7 +123,7 @@ void CCore::Loop()
 {
 	while (true)
 	{
-		bool bShouldUnload = U::KeyHandler.Down(VK_F11) && SDK::IsGameWindowInFocus() || m_bUnload;
+		bool bShouldUnload = U::KeyHandler.Down(VK_F11, true) && SDK::IsGameWindowInFocus() || m_bUnload;
 		if (bShouldUnload)
 			break;
 
@@ -145,17 +146,22 @@ void CCore::Unload()
 
 	if (F::Menu.m_bIsOpen)
 		I::MatSystemSurface->SetCursorAlwaysVisible(false);
-	if (I::Input->CAM_IsThirdPerson())
+	H::ConVars.FindVar("cl_wpn_sway_interp")->SetValue(0.f);
+	H::ConVars.FindVar("cl_wpn_sway_scale")->SetValue(0.f);
+	F::Visuals.RestoreWorldModulation();
+	if (auto pLocal = H::Entities.GetLocal())
 	{
-		if (auto pLocal = H::Entities.GetLocal())
+		if (F::Spectate.HasTarget())
+		{
+			F::Spectate.NetUpdateStart(pLocal);
+			I::EngineClient->SetViewAngles(F::Spectate.m_vOldView);
+		}
+		if (I::Input->CAM_IsThirdPerson())
 		{
 			I::Input->CAM_ToFirstPerson();
 			pLocal->ThirdPersonSwitch();
 		}
 	}
-	F::Visuals.RestoreWorldModulation();
-	H::ConVars.FindVar("cl_wpn_sway_interp")->SetValue(0.f);
-	H::ConVars.FindVar("cl_wpn_sway_scale")->SetValue(0.f);
 
 	Sleep(250);
 	F::EnginePrediction.Unload();

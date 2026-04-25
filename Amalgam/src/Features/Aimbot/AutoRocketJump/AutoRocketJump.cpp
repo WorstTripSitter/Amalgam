@@ -78,8 +78,8 @@ bool CAutoRocketJump::SetAngles(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUser
 		if (!vSolutions.empty())
 		{
 			vShootPos += vForward * vSolutions.front();
-			m_vAngles.y = flYaw - (RAD2DEG(atan2(vShootPos.y, vShootPos.x)) - flYaw);
-			flYaw = RAD2DEG(atan2(vShootPos.y, vShootPos.x));
+			m_vAngles.y = flYaw - (Math::Rad2Deg(atan2(vShootPos.y, vShootPos.x)) - flYaw);
+			flYaw = Math::Rad2Deg(atan2(vShootPos.y, vShootPos.x));
 		}
 	}
 
@@ -93,7 +93,7 @@ bool CAutoRocketJump::SetAngles(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUser
 		if (!vSolutions.empty())
 		{
 			vShootPos += vForward * vSolutions.front();
-			m_vAngles.x = flPitch - (RAD2DEG(atan2(-vShootPos.z, vShootPos.x)) - flPitch);
+			m_vAngles.x = flPitch - (Math::Rad2Deg(atan2(-vShootPos.z, vShootPos.x)) - flPitch);
 		}
 	}
 
@@ -146,38 +146,40 @@ void CAutoRocketJump::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* p
 			bool bMoveSimSetup = F::MoveSim.Initialize(pLocal, tMoveStorage, false); // do move sim after to not mess with proj sim
 			if (bMoveSimSetup && bProjSimSetup)
 			{
-				Vec3 vOriginal = F::ProjSim.GetOrigin();
 				int iSkip = bCurrGrounded ? Vars::Misc::Movement::AutoRocketJumpSkipGround.Value : Vars::Misc::Movement::AutoRocketJumpSkipAir.Value;
+
+				CGameTrace trace = {};
+				CTraceFilterCollideable filter = {};
+				filter.pSkip = pLocal;
+
+				Vec3 vNew = F::ProjSim.GetOrigin();
 				for (int n = 1; n < 10; n++)
 				{
 					F::MoveSim.RunTick(tMoveStorage);
-					if (n <= iSkip)
+					if (n <= iSkip || n == 1 && G::Reloading)
 						continue;
 
-					Vec3 Old = F::ProjSim.GetOrigin();
 					F::ProjSim.RunTick(tProjInfo);
-					Vec3 New = F::ProjSim.GetOrigin();
 
-					CGameTrace trace = {};
-					CTraceFilterCollideable filter = {};
-					filter.pSkip = pLocal;
-					SDK::Trace(Old, New, MASK_SOLID, &filter, &trace);
+					Vec3 vOld = vNew; vNew = F::ProjSim.GetOrigin();
+					SDK::Trace(vOld, vNew, MASK_SOLID, &filter, &trace);
 					if (trace.DidHit())
 					{
 						if (!pLocal->IsOnGround() || pLocal->IsSwimming())
 							break;
 
-						auto WillHit = [](CTFPlayer* pLocal, const Vec3& vOrigin, const Vec3& vPoint)
-							{
-								const Vec3 vOriginal = pLocal->GetAbsOrigin();
-								pLocal->SetAbsOrigin(vOrigin);
-								Vec3 vPos; pLocal->m_Collision()->CalcNearestPoint(vPoint, &vPos);
-								pLocal->SetAbsOrigin(vOriginal);
+						auto fWillHit = [](CTFPlayer* pLocal, const Vec3& vOrigin, const Vec3& vPoint)
+						{
+							const Vec3 vOriginal = pLocal->GetAbsOrigin();
+							pLocal->SetAbsOrigin(vOrigin);
+							Vec3 vPos; pLocal->m_Collision()->CalcNearestPoint(vPoint, &vPos);
+							pLocal->SetAbsOrigin(vOriginal);
 
-								return vPoint.DistTo(vPos) < TF_ROCKET_RADIUS_FOR_RJS && SDK::VisPosWorld(pLocal, pLocal, vPoint, vOrigin + pLocal->m_vecViewOffset(), MASK_SHOT);
-							};
+							float flRadiusSqr = powf(TF_ROCKET_RADIUS_FOR_RJS, 2);
+							return vPoint.DistToSqr(vPos) < flRadiusSqr && SDK::VisPosWorld(pLocal, pLocal, vPoint, vOrigin + pLocal->m_vecViewOffset(), MASK_SHOT);
+						};
 
-						bWillHit = WillHit(pLocal, tMoveStorage.m_MoveData.m_vecAbsOrigin, trace.endpos + trace.plane.normal);
+						bWillHit = fWillHit(pLocal, tMoveStorage.m_MoveData.m_vecAbsOrigin, trace.endpos + trace.plane.normal);
 						if (bWillHit)
 						{
 							m_iDelay = n;
@@ -189,9 +191,9 @@ void CAutoRocketJump::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* p
 								SDK::Output("Auto jump", std::format("Ticks to hit: {} ({})", m_iDelay, n).c_str(), { 255, 0, 0 }, Vars::Debug::Logging.Value);
 								if (Vars::Debug::Info.Value)
 								{
-									//G::LineStorage.clear(); G::BoxStorage.clear();
 									Vec3 vAngles = Math::VectorAngles(trace.plane.normal);
-									G::BoxStorage.emplace_back(trace.endpos + trace.plane.normal, Vec3(-1.f, -1.f, -1.f), Vec3(1.f, 1.f, 1.f), vAngles, I::GlobalVars->curtime + 5.f, Color_t(), Color_t(0, 0, 0, 0), true);
+									G::LineStorage.clear(); G::BoxStorage.clear();
+									G::BoxStorage.emplace_back(trace.endpos + trace.plane.normal, Vec3::Get(-1), Vec3::Get(1), vAngles, I::GlobalVars->curtime + 5.f, Color_t(), Color_t(0, 0, 0, 0), true);
 									G::LineStorage.emplace_back(std::pair<Vec3, Vec3>(tMoveStorage.m_MoveData.m_vecAbsOrigin + pLocal->m_vecViewOffset(), trace.endpos + trace.plane.normal), I::GlobalVars->curtime + 5.f, Color_t(), true);
 								}
 							}

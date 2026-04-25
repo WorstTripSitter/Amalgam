@@ -3,7 +3,6 @@
 #include "../Features/Visuals/Notifications/Notifications.h"
 #include "../Features/ImGui/Menu/Menu.h"
 #include "../Features/EnginePrediction/EnginePrediction.h"
-#include <random>
 
 #pragma warning (disable : 6385)
 
@@ -131,7 +130,7 @@ std::wstring SDK::ConvertUtf8ToWide(const std::string& source)
 	int size = MultiByteToWideChar(CP_UTF8, 0, source.data(), -1, nullptr, 0);
 	std::wstring result(size, 0);
 	MultiByteToWideChar(CP_UTF8, 0, source.data(), -1, result.data(), size);
-	return result;
+	result.pop_back(); return result;
 }
 
 std::string SDK::ConvertWideToUTF8(const std::wstring& source)
@@ -139,7 +138,7 @@ std::string SDK::ConvertWideToUTF8(const std::wstring& source)
 	int size = WideCharToMultiByte(CP_UTF8, 0, source.data(), -1, nullptr, 0, nullptr, nullptr);
 	std::string result(size, 0);
 	WideCharToMultiByte(CP_UTF8, 0, source.data(), -1, result.data(), size, nullptr, nullptr);
-	return result;
+	result.pop_back(); return result;
 }
 
 HWND SDK::GetTeamFortressWindow()
@@ -156,26 +155,19 @@ bool SDK::IsGameWindowInFocus()
 	return hWindow == GetForegroundWindow() || !hWindow;
 }
 
-double SDK::PlatFloatTime()
+bool SDK::StdRandomBool()
 {
-	static auto Plat_FloatTime = U::Memory.GetModuleExport<double(*)()>("tier0.dll", "Plat_FloatTime");
-	return Plat_FloatTime();
+	return StdRandomInt(0, 1);
 }
-
 int SDK::StdRandomInt(int iMin, int iMax)
 {
-	std::random_device rd;
-	std::mt19937 gen(rd());
-	std::uniform_int_distribution<> distr(iMin, iMax);
-	return distr(gen);
+	std::uniform_int_distribution<int> iDistribution(iMin, iMax);
+	return iDistribution(Random);
 }
-
 float SDK::StdRandomFloat(float flMin, float flMax)
 {
-	std::random_device rd;
-	std::mt19937 gen(rd());
-	std::uniform_real_distribution<float> distr(flMin, flMax);
-	return distr(gen);
+	std::uniform_real_distribution<float> flDistribution(flMin, flMax);
+	return flDistribution(Random);
 }
 
 int SDK::SeedFileLineHash(int iSeed, const char* sName, int iAdditionalSeed)
@@ -195,23 +187,26 @@ int SDK::SharedRandomInt(unsigned iSeed, const char* sName, int iMinVal, int iMa
 	I::UniformRandomStream->SetSeed(iSeed2);
 	return I::UniformRandomStream->RandomInt(iMinVal, iMaxVal);
 }
-
 void SDK::RandomSeed(int iSeed)
 {
 	static auto RandomSeed = U::Memory.GetModuleExport<void(*)(uint32_t)>("vstdlib.dll", "RandomSeed");
 	RandomSeed(iSeed);
 }
-
 int SDK::RandomInt(int iMinVal, int iMaxVal)
 {
 	static auto RandomInt = U::Memory.GetModuleExport<int(*)(int, int)>("vstdlib.dll", "RandomInt");
 	return RandomInt(iMinVal, iMaxVal);
 }
-
 float SDK::RandomFloat(float flMinVal, float flMaxVal)
 {
 	static auto RandomFloat = U::Memory.GetModuleExport<float(*)(float, float)>("vstdlib.dll", "RandomFloat");
 	return RandomFloat(flMinVal, flMaxVal);
+}
+
+double SDK::PlatFloatTime()
+{
+	static auto Plat_FloatTime = U::Memory.GetModuleExport<double(*)()>("tier0.dll", "Plat_FloatTime");
+	return Plat_FloatTime();
 }
 
 bool SDK::W2S(const Vec3& vOrigin, Vec3& vScreen, bool bAlways)
@@ -323,7 +318,7 @@ bool SDK::IsOnScreen(CBaseEntity* pEntity, bool bShouldGetOwner)
 			pEntity = pOwner;
 	}
 
-	return IsOnScreen(pEntity, pEntity->entindex() == I::EngineClient->GetLocalPlayer() && !I::EngineClient->IsPlayingDemo() ? F::EnginePrediction.m_vOrigin : pEntity->GetAbsOrigin());
+	return IsOnScreen(pEntity, pEntity->GetAbsOrigin());
 }
 
 void SDK::Trace(const Vec3& vStart, const Vec3& vEnd, unsigned int nMask, ITraceFilter* pFilter, CGameTrace* pTrace)
@@ -720,13 +715,13 @@ void SDK::FixMovement(CUserCmd* pCmd, const Vec3& vCurAngle, const Vec3& vTarget
 	bool bCurOOB = fabsf(Math::NormalizeAngle(vCurAngle.x)) > 90.f;
 	bool bTargetOOB = fabsf(Math::NormalizeAngle(vTargetAngle.x)) > 90.f;
 
-	Vec3 vMove = { pCmd->forwardmove, pCmd->sidemove * (bCurOOB ? -1 : 1), pCmd->upmove };
+	Vec3 vMove = { pCmd->forwardmove, pCmd->sidemove * (bCurOOB ? -1 : 1), pCmd->upmove};
 	float flSpeed = vMove.Length2D();
 	Vec3 vMoveAng = Math::VectorAngles(vMove);
 
 	float flCurYaw = vCurAngle.y + (bCurOOB ? 180.f : 0.f);
 	float flTargetYaw = vTargetAngle.y + (bTargetOOB ? 180.f : 0.f);
-	float flYaw = DEG2RAD(flTargetYaw - flCurYaw + vMoveAng.y);
+	float flYaw = Math::Deg2Rad(flTargetYaw - flCurYaw + vMoveAng.y);
 
 	pCmd->forwardmove = cos(flYaw) * flSpeed;
 	pCmd->sidemove = sin(flYaw) * flSpeed * (bTargetOOB ? -1 : 1);
@@ -748,7 +743,7 @@ bool SDK::StopMovement(CTFPlayer* pLocal, CUserCmd* pCmd)
 
 	if (G::Attacking != 1)
 	{
-		float flDirection = Math::VectorAngles(pLocal->m_vecVelocity() * -1).y;
+		float flDirection = Math::VectorAngles(-pLocal->m_vecVelocity()).y;
 		pCmd->viewangles = { 90, flDirection, 0 };
 		pCmd->sidemove = 0; pCmd->forwardmove = 0;
 		return true;
@@ -772,8 +767,8 @@ Vec3 SDK::ComputeMove(const CUserCmd* pCmd, CTFPlayer* pLocal, const Vec3& vFrom
 
 	Vec3 vSilent = vDiff.To2D();
 	Vec3 vAngle = Math::VectorAngles(vSilent);
-	const float flYaw = DEG2RAD(vAngle.y - pCmd->viewangles.y);
-	const float flPitch = DEG2RAD(vAngle.x - pCmd->viewangles.x);
+	const float flYaw = Math::Deg2Rad(vAngle.y - pCmd->viewangles.y);
+	const float flPitch = Math::Deg2Rad(vAngle.x - pCmd->viewangles.x);
 
 	Vec3 vMove = { cos(flYaw) * 450.f, -sin(flYaw) * 450.f, -cos(flPitch) * 450.f };
 	if (!(I::EngineTrace->GetPointContents(pLocal->GetShootPos()) & CONTENTS_WATER)) // only apply upmove in water

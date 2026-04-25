@@ -20,6 +20,7 @@
 #include "../Utils/Timer/Timer.h"
 #include "../Utils/Macros/Macros.h"
 #include <intrin.h>
+#include <random>
 
 #define DEFAULT_COLOR		Color_t(175, 150, 255, 255)
 #define ALTERNATE_COLOR		Color_t(175, 150, 255, 127)
@@ -68,16 +69,6 @@
 #define OUTPUT_CHAT 1 << 4
 #define OUTPUT_PARTY 1 << 5
 
-template <class T> int sign(T val)
-{
-	return (val > T(0)) - (val < T(0));
-}
-
-inline float fnmodf(float flX, float flY)
-{	// silly fix for negative values
-	return fmodf(flX, flY) + (flX < 0 ? flY : 0);
-}
-
 namespace SDK
 {
 	void Output(const char* sFunction, const char* sLog = nullptr, Color_t tColor = { 255, 255, 255, 255 },
@@ -96,15 +87,17 @@ namespace SDK
 	HWND GetTeamFortressWindow();
 	bool IsGameWindowInFocus();
 
-	double PlatFloatTime();
-	int StdRandomInt(int iMin, int iMax);
-	float StdRandomFloat(float flMin, float flMax);
+	inline std::default_random_engine Random = {};
+	bool StdRandomBool();
+	int StdRandomInt(int iMin = 0, int iMax = VALVE_RAND_MAX);
+	float StdRandomFloat(float flMin = 0.f, float flMax = 1.f);
 
 	int SeedFileLineHash(int iSeed, const char* sName, int iAdditionalSeed);
 	int SharedRandomInt(unsigned iSeed, const char* sName, int iMinVal, int iMaxVal, int iAdditionalSeed);
 	void RandomSeed(int iSeed);
 	int RandomInt(int iMinVal = 0, int iMaxVal = VALVE_RAND_MAX);
 	float RandomFloat(float flMinVal = 0.f, float flMaxVal = 1.f);
+	double PlatFloatTime();
 
 	bool W2S(const Vec3& vOrigin, Vec3& vScreen, bool bAlways = false);
 	bool IsOnScreen(CBaseEntity* pEntity, const matrix3x4& mTransform, float* pLeft = nullptr, float* pRight = nullptr, float* pTop = nullptr, float* pBottom = nullptr, bool bAll = false);

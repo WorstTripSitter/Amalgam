@@ -140,7 +140,7 @@ void CMisc::AutoStrafe(CTFPlayer* pLocal, CUserCmd* pCmd)
 			break;
 
 		float flTurnScale = Math::RemapVal(Vars::Misc::Movement::AutoStrafeTurnScale.Value, 0.f, 1.f, 0.9f, 1.f);
-		float flRotation = DEG2RAD((flDirDelta > 0.f ? -90.f : 90.f) + flDirDelta * flTurnScale);
+		float flRotation = Math::Deg2Rad((flDirDelta > 0.f ? -90.f : 90.f) + flDirDelta * flTurnScale);
 		float flCosRot = cosf(flRotation), flSinRot = sinf(flRotation);
 
 		pCmd->forwardmove = flCosRot * flForward - flSinRot * flSide;
@@ -346,7 +346,7 @@ void CMisc::FastMovement(CTFPlayer* pLocal, CUserCmd* pCmd)
 			return;
 
 		Vec3 vMove = { pCmd->forwardmove, pCmd->sidemove, 0.f };
-		Vec3 vAngMoveReverse = Math::VectorAngles(vMove * -1.f);
+		Vec3 vAngMoveReverse = Math::VectorAngles(-vMove);
 		pCmd->forwardmove = -vMove.Length();
 		pCmd->sidemove = 0.f;
 		pCmd->viewangles.y = fmodf(pCmd->viewangles.y - vAngMoveReverse.y, 360.f);
@@ -453,8 +453,9 @@ int CMisc::AntiBackstab(CTFPlayer* pLocal, CUserCmd* pCmd, bool bSendPacket)
 		Vec3 vTargetPos1 = pPlayer->GetCenter();
 		Vec3 vTargetPos2 = vTargetPos1 + pPlayer->m_vecVelocity() * F::Backtrack.GetReal();
 		float flDistance = std::max(std::max(SDK::MaxSpeed(pPlayer), SDK::MaxSpeed(pLocal)), pPlayer->m_vecVelocity().Length());
-		if ((vLocalPos.DistTo(vTargetPos1) > flDistance || !SDK::VisPosWorld(pLocal, pPlayer, vLocalPos, vTargetPos1))
-			&& (vLocalPos.DistTo(vTargetPos2) > flDistance || !SDK::VisPosWorld(pLocal, pPlayer, vLocalPos, vTargetPos2)))
+		float flDistanceSqr = powf(flDistance, 2);
+		if ((vLocalPos.DistToSqr(vTargetPos1) > flDistanceSqr || !SDK::VisPosWorld(pLocal, pPlayer, vLocalPos, vTargetPos1))
+			&& (vLocalPos.DistToSqr(vTargetPos2) > flDistanceSqr || !SDK::VisPosWorld(pLocal, pPlayer, vLocalPos, vTargetPos2)))
 			continue;
 
 		vTargets.emplace_back(vTargetPos2, pEntity);
@@ -463,9 +464,9 @@ int CMisc::AntiBackstab(CTFPlayer* pLocal, CUserCmd* pCmd, bool bSendPacket)
 		return 0;
 
 	std::sort(vTargets.begin(), vTargets.end(), [&](const auto& a, const auto& b) -> bool
-		{
-			return pLocal->GetCenter().DistTo(a.first) < pLocal->GetCenter().DistTo(b.first);
-		});
+	{
+		return pLocal->GetCenter().DistToSqr(a.first) < pLocal->GetCenter().DistToSqr(b.first);
+	});
 
 	auto& pTargetPos = vTargets.front();
 	switch (Vars::Misc::Automation::AntiBackstab.Value)
@@ -486,28 +487,28 @@ int CMisc::AntiBackstab(CTFPlayer* pLocal, CUserCmd* pCmd, bool bSendPacket)
 		// if the closest spy is a cheater, assume auto stab is being used, otherwise don't do anything if target is in front
 		if (!bCheater)
 		{
-			auto TargetIsBehind = [&]()
-				{
-					const float flCompDist = PLAYER_ORIGIN_COMPRESSION / 2;
-					const float flSqCompDist = 0.0884f;
+			auto fTargetIsBehind = [&]()
+			{
+				const float flCompDist = PLAYER_ORIGIN_COMPRESSION / 2;
+				const float flSqCompDist = 0.0884f;
 
-					Vec3 vToTarget = (pLocal->m_vecOrigin() - pTargetPos.first).To2D();
-					const float flDist = vToTarget.Normalize();
-					if (flDist < flSqCompDist)
-						return true;
+				Vec3 vToTarget = (pLocal->m_vecOrigin() - pTargetPos.first).To2D();
+				const float flDist = vToTarget.Normalize();
+				if (flDist < flSqCompDist)
+					return true;
 
-					const float flExtra = 2.f * flCompDist / flDist; // account for origin compression
-					float flPosVsTargetViewMinDot = 0.f - 0.0031f - flExtra;
+				const float flExtra = 2.f * flCompDist / flDist; // account for origin compression
+				float flPosVsTargetViewMinDot = 0.f - 0.0031f - flExtra;
 
-					Vec3 vTargetForward; Math::AngleVectors(pCmd->viewangles, &vTargetForward);
-					vTargetForward.Normalize2D();
+				Vec3 vTargetForward; Math::AngleVectors(pCmd->viewangles, &vTargetForward);
+				vTargetForward.Normalize2D();
 
-					const float flPosVsTargetViewDot = vToTarget.Dot(vTargetForward); // Behind?
+				const float flPosVsTargetViewDot = vToTarget.Dot(vTargetForward); // Behind?
 
-					return flPosVsTargetViewDot > flPosVsTargetViewMinDot;
-				};
+				return flPosVsTargetViewDot > flPosVsTargetViewMinDot;
+			};
 
-			if (!TargetIsBehind())
+			if (!fTargetIsBehind())
 				return 0;
 		}
 
