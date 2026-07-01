@@ -8,6 +8,58 @@
 #include "../../Visuals/Visuals.h"
 #include "../../AntiCheatCompatibility/AntiCheatCompatibility.h"
 
+CTFPlayer* last_target = nullptr;
+float          next_target_delay = 0.f;
+int            heal_type = 0;
+int            heal_target_maxhp = 0;
+int            in_attack_spam = 0;
+
+namespace Vars::Aimbot::MediGun
+{
+    inline auto PreferFriends = false;
+}
+
+int GetHealPriority(CTFPlayer* LocalPlayer, CTFWeaponBase* LocalWeapon, CBaseEntity* Entity)
+{
+	if (!Entity || Entity->IsDormant())
+		return 0;
+
+	if (Entity->IsPlayer())
+	{
+	   const auto Player = Entity->As<CTFPlayer>();
+	   if (!Player)
+			return 0;
+
+		int priority = 0;
+		int health = Player->m_iHealth();
+		int max_health = Player->GetMaxHealth();
+
+		// Heal-rate will be affected if their heal is greater than max health.
+		if (health < max_health)
+			priority++;
+
+		max_health *= 0.25f;
+		while (max_health > 1 && health < max_health) {
+			priority++;
+			max_health *= 0.25f;
+		}
+
+		auto healers = Player->m_nNumHealers();
+		if (healers > 0)
+		{
+			CTFPlayer* heal_target = LocalWeapon->As<CWeaponMedigun>()->m_hHealingTarget().Get()->As<CTFPlayer>();
+			if (heal_target != nullptr && heal_target == Player)
+				healers--;
+
+			priority -= healers;
+		}
+
+	   return priority;
+	}
+
+	return 0;
+}
+
 static inline std::vector<Target_t> GetTargets(CTFPlayer* pLocal, CTFWeaponBase* pWeapon)
 {
 	std::vector<Target_t> vTargets;
@@ -36,13 +88,57 @@ static inline std::vector<Target_t> GetTargets(CTFPlayer* pLocal, CTFWeaponBase*
 			bool bTeam = pEntity->m_iTeamNum() == pLocal->m_iTeamNum();
 			if (bTeam)
 			{
-				if (bHeal)
-				{
-					if (pEntity->As<CTFPlayer>()->InCond(TF_COND_STEALTHED)
-						|| Vars::Aimbot::Healing::HealPriority.Value == Vars::Aimbot::Healing::HealPriorityEnum::FriendsOnly
-						&& !H::Entities.IsFriend(pEntity->entindex()) && !H::Entities.InParty(pEntity->entindex()))
-						continue;
-				}
+             if (bHeal)
+             {
+                 {
+                     const auto Player = pEntity->As<CTFPlayer>();
+                     const auto LocalMediGun = pWeapon->As<CWeaponMedigun>();
+                     if (LocalMediGun->m_hHealingTarget().Get())
+                     {
+                         static CBaseEntity* LastHealTarget = {};
+                         Timer timer = {};
+
+                         if (LocalMediGun->m_bChargeRelease())
+                         {
+                             if (LocalMediGun->m_hHealingTarget().Get() == Player && timer.Run(1.5))
+                                 continue;
+                         }
+                         else
+                         {
+                             if (Player->IsInvulnerable())
+                                 continue;
+
+                             if (LocalMediGun->m_hHealingTarget().Get() == Player && LastHealTarget == Player && timer.Run(1.5))
+                             {
+                                 continue;
+                             }
+
+                             auto mult{1.44f};
+
+                             if (LocalMediGun->GetMedigunType() == MEDIGUN_QUICKFIX)
+                             {
+                                 mult = 1.24f;
+                             }
+
+                             if (static_cast<float>(Player->m_iHealth()) >= static_cast<float>(Player->GetMaxHealth()) * mult)
+                             {
+                                 continue;
+                             }
+
+                             CUtlVector<CBaseEntity*> itemList;
+                             int iBackstabShield = SDK::AttribHookValue(0, "set_blockbackstab_once", pEntity, &itemList);
+                             if (iBackstabShield && itemList.Count())
+                             {
+                                 auto item = itemList.Element(0);
+                                 if (item && item->ShouldDraw() && Player->m_iHealth() >= Player->GetMaxHealth())
+                                     continue;
+                             }
+                         }
+
+                         LastHealTarget = LocalMediGun->m_hHealingTarget().Get();
+                     }
+                 }
+             }
 				if (!F::AimbotGlobal.FriendlyFire() && SDK::AttribHookValue(0, "jarate_duration", pWeapon) > 0)
 				{
 					if (!pEntity->As<CTFPlayer>()->InCond(TF_COND_BURNING))
@@ -59,6 +155,7 @@ static inline std::vector<Target_t> GetTargets(CTFPlayer* pLocal, CTFWeaponBase*
 			if (bTeam && bHeal)
 			{
 				iPriority = 0;
+
 				switch (Vars::Aimbot::Healing::HealPriority.Value)
 				{
 				case Vars::Aimbot::Healing::HealPriorityEnum::PrioritizeFriends:

@@ -577,7 +577,7 @@ void CAutoHeal::ActivateResistType(CUserCmd* pCmd, int iType)
 
 void CAutoHeal::AutoVaccinator(CUserCmd* pCmd)
 {
-	if (!Vars::Aimbot::Healing::AutoVaccinator.Value || m_pWeapon->GetMedigunType() != MEDIGUN_RESIST)
+	if (!Vars::Aimbot::Healing::AutoVaccinator.Value)
 		return;
 
 #ifdef DEBUG_VACCINATOR
@@ -656,7 +656,7 @@ void CAutoHeal::Event(IGameEvent* pEvent, uint32_t uHash)
 
 		//auto pLocal = H::Entities.GetLocal();
 		auto pWeapon = H::Entities.GetWeapon()->As<CWeaponMedigun>();
-		if (/*!pLocal ||*/ !pWeapon || pWeapon->GetWeaponID() != TF_WEAPON_MEDIGUN || pWeapon->GetMedigunType() != MEDIGUN_RESIST)
+		if (/*!pLocal ||*/ !pWeapon || pWeapon->GetWeaponID() != TF_WEAPON_MEDIGUN)
 			return;
 
 		int iVictim = I::EngineClient->GetPlayerForUserID(pEvent->GetInt("userid"));

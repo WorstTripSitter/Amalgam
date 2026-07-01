@@ -410,25 +410,10 @@ void CMenu::MenuAimbot(int iTab)
 					if (IconButton(ICON_MD_KEYBOARD_ARROW_DOWN))
 						OpenPopup("Auto Backstab");
 
-					FToggle(Vars::Aimbot::Melee::AdvancedDisciplinaryAction, FToggleEnum::Left, &Hovered);
-					FTooltip("Target teammates with the Disciplinary Action to give Us/Them a speed boost", Hovered);
-					SameLine(GetWindowWidth() - H::Draw.Scale(33));
-					if (IconButton(ICON_MD_KEYBOARD_ARROW_DOWN))
-						OpenPopup("AdvancedDisciplinaryActionOptions");
-
 					SetNextWindowSize({ H::Draw.Scale(300), 0 });
 					if (FBeginPopup("Auto Backstab"))
 					{
 						FToggle(Vars::Aimbot::Melee::IgnoreRazorback);
-
-						EndPopup();
-					}
-
-					SetNextWindowSize({ H::Draw.Scale(300), 0 });
-					if (FBeginPopup("AdvancedDisciplinaryActionOptions"))
-					{
-						FToggle(Vars::Aimbot::Melee::AdvancedDisciplinaryActionIgnoreSpeedBoosted);
-						FToggle(Vars::Aimbot::Melee::AdvancedDisciplinaryActionFriendsOnly);
 
 						EndPopup();
 					}

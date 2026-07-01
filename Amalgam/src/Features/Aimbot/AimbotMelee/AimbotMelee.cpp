@@ -45,7 +45,7 @@ static inline std::vector<Target_t> GetTargets(CTFPlayer* pLocal, CTFWeaponBase*
 
 			if (Player->m_iTeamNum() == pLocal->m_iTeamNum())
 			{
-				if (Vars::Aimbot::Melee::AdvancedDisciplinaryActionIgnoreSpeedBoosted.Value && Player->InCond(TF_COND_SPEED_BOOST))
+				if (Vars::Aimbot::Melee::WhipTeam.Value && Player->InCond(TF_COND_SPEED_BOOST))
 					continue;
 			}
 
