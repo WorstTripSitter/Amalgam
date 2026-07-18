@@ -14,6 +14,7 @@
 #include "../Features/Visuals/FakeAngle/FakeAngle.h"
 #include "../Features/Spectate/Spectate.h"
 #include "../Features/AntiCheatCompatibility/AntiCheatCompatibility.h"
+#include "../Features/Misc/Movement/Movement.h"
 
 static no_inline void UpdateInfo(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd)
 {
@@ -52,6 +53,7 @@ MAKE_HOOK(CHLClient_CreateMove, U::Memory.GetVirtual(I::Client, 21), void,
 		F::Spectate.CreateMove(pCmd);
 		F::Backtrack.CreateMove(pCmd);
 		F::Misc.RunPre(pLocal, pCmd);
+    F::Movement.EarlyCreateMove(pLocal, pCmd);
 	F::Ticks.Start(pLocal, pCmd);
 		F::Aimbot.Run(pLocal, pWeapon, pCmd);
 	F::Ticks.End(pLocal, pCmd);

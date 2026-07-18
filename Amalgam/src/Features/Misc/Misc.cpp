@@ -17,7 +17,6 @@ void CMisc::RunPre(CTFPlayer* pLocal, CUserCmd* pCmd)
 		|| pLocal->IsTaunting() || pLocal->InCond(TF_COND_SHIELD_CHARGE))
 		return;
 
-	AutoJump(pLocal, pCmd);
 	EdgeJump(pLocal, pCmd);
 	if (pLocal->InCond(TF_COND_HALLOWEEN_KART))
 		return;
@@ -45,35 +44,6 @@ void CMisc::RunPost(CTFPlayer* pLocal, CUserCmd* pCmd)
 		AutoPeek(pLocal, pCmd, true);
 		FastMovement(pLocal, pCmd);
 	}
-}
-
-
-
-void CMisc::AutoJump(CTFPlayer* pLocal, CUserCmd* pCmd)
-{
-	if (!Vars::Misc::Movement::Bunnyhop.Value)
-		return;
-
-	if (auto pWeapon = H::Entities.GetWeapon(); pWeapon && pWeapon->GetWeaponID() == TF_WEAPON_GRAPPLINGHOOK && pWeapon->As<CTFGrapplingHook>()->m_hProjectile())
-		return;
-
-	static bool bStaticAttempted = false, bStaticValid = false;
-	bool bLastAttempted = bStaticAttempted, bLastValid = bStaticValid;
-	bool bCurrAttempted = bStaticAttempted = G::OriginalCmd.buttons & IN_JUMP, bCurrValid = bStaticValid = pLocal->m_hGroundEntity() && !pLocal->IsDucking();
-	if (!bCurrValid || bCurrValid && G::LastUserCmd->buttons & IN_JUMP)
-		pCmd->buttons &= ~IN_JUMP;
-
-	static float flLastAttempt = 0.f;
-	bool bPressed = bCurrAttempted && !bLastAttempted;
-	bool bParachute = SDK::AttribHookValue(0, "parachute_attribute", pLocal) && !pLocal->InCond(TF_COND_PARACHUTE_ACTIVE);
-	bool bAllow = !bParachute || G::OriginalCmd.buttons & IN_DUCK; // evil we don't want to manual
-	bool bManual = bAllow && (bPressed || bParachute && I::GlobalVars->curtime < flLastAttempt + 0.1f);
-	if (bPressed && !bCurrValid)
-		flLastAttempt = I::GlobalVars->curtime;
-	if (bManual)
-		pCmd->buttons |= IN_JUMP;
-
-	F::AntiCheatCompatibility.BunnyHop(pCmd, bCurrValid, bLastValid);
 }
 
 void CMisc::AutoJumpbug(CTFPlayer* pLocal, CUserCmd* pCmd)
