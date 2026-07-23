@@ -60,6 +60,61 @@ int GetHealPriority(CTFPlayer* LocalPlayer, CTFWeaponBase* LocalWeapon, CBaseEnt
 	return 0;
 }
 
+float get_overheal_expert_mod(CTFWeaponBase* LocalWeapon) {
+	float overheal_expert = (float)SDK::AttribHookValue(0, ("overheal_expert"), LocalWeapon, 0, 1);
+	return overheal_expert > 0.f ? overheal_expert / 4.f : 0.f;
+}
+
+bool ShouldHealPlayer(CWeaponMedigun* LocalMedigun, CTFPlayer* Player)
+{
+	Timer SwitchDelay = {};
+
+	if (LocalMedigun->m_hHealingTarget().Get())
+	{
+		static CBaseEntity* LastHealTarget = {};
+
+		if (LocalMedigun->m_bChargeRelease())
+		{
+			if (LocalMedigun->m_hHealingTarget().Get() == Player && SwitchDelay.Run(2.5))
+				return false;
+		}
+		else
+		{
+			if (Player->IsInvulnerable())
+				return false;
+
+			if (LocalMedigun->m_hHealingTarget().Get() == Player && LastHealTarget == Player && SwitchDelay.Run(2.5))
+				return false;
+
+			const auto PlayerResource = H::Entities.GetResource();
+			auto MaxBuffedHealth = PlayerResource->m_iMaxBuffedHealth(Player->entindex());
+			const auto OverhealExpert = get_overheal_expert_mod(LocalMedigun);
+			if (OverhealExpert > 0.0f)
+				MaxBuffedHealth += Player->GetMaxHealth() * OverhealExpert;
+
+			auto Multiplier = 1.44f;
+			if (LocalMedigun->GetMedigunType() == MEDIGUN_QUICKFIX)
+				Multiplier = 1.24f;
+
+			if (static_cast<float>(Player->m_iHealth()) >= static_cast<float>(MaxBuffedHealth) * Multiplier)
+				return false;
+
+			CUtlVector<CBaseEntity*> ItemList;
+			int BackstabShield = SDK::AttribHookValue(0, "set_blockbackstab_once", Player, &ItemList);
+			if (BackstabShield && ItemList.Count())
+			{
+				auto Item = ItemList.Element(0);
+				if (Item && Item->ShouldDraw() && Player->m_iHealth() >= Player->GetMaxHealth())
+					return false;
+			}
+		}
+
+		LastHealTarget = LocalMedigun->m_hHealingTarget().Get();
+	}
+
+	return true;
+}
+
 static inline std::vector<Target_t> GetTargets(CTFPlayer* pLocal, CTFWeaponBase* pWeapon)
 {
 	std::vector<Target_t> vTargets;
@@ -93,7 +148,9 @@ static inline std::vector<Target_t> GetTargets(CTFPlayer* pLocal, CTFWeaponBase*
                  {
                      const auto Player = pEntity->As<CTFPlayer>();
                      const auto LocalMediGun = pWeapon->As<CWeaponMedigun>();
-                     if (LocalMediGun->m_hHealingTarget().Get())
+					 if (!ShouldHealPlayer(LocalMediGun, Player))
+                         continue;
+                     /*if (LocalMediGun->m_hHealingTarget().Get())
                      {
                          static CBaseEntity* LastHealTarget = {};
                          Timer timer = {};
@@ -113,6 +170,12 @@ static inline std::vector<Target_t> GetTargets(CTFPlayer* pLocal, CTFWeaponBase*
                                  continue;
                              }
 
+							 const auto PlayerResource = H::Entities.GetResource();
+							 auto max_buffed_health = PlayerResource->m_iMaxBuffedHealth(Player->entindex());
+							 const auto overheal_expert = get_overheal_expert_mod(pWeapon);
+							 if (overheal_expert > 0.0f)
+								 max_buffed_health += Player->GetMaxHealth() * overheal_expert;
+
                              auto mult{1.44f};
 
                              if (LocalMediGun->GetMedigunType() == MEDIGUN_QUICKFIX)
@@ -120,7 +183,7 @@ static inline std::vector<Target_t> GetTargets(CTFPlayer* pLocal, CTFWeaponBase*
                                  mult = 1.24f;
                              }
 
-                             if (static_cast<float>(Player->m_iHealth()) >= static_cast<float>(Player->GetMaxHealth()) * mult)
+                             if (static_cast<float>(Player->m_iHealth()) >= static_cast<float>(max_buffed_health) * mult)
                              {
                                  continue;
                              }
@@ -136,7 +199,7 @@ static inline std::vector<Target_t> GetTargets(CTFPlayer* pLocal, CTFWeaponBase*
                          }
 
                          LastHealTarget = LocalMediGun->m_hHealingTarget().Get();
-                     }
+                     }*/
                  }
              }
 				if (!SDK::FriendlyFire() && SDK::AttribHookValue(0, "jarate_duration", pWeapon) > 0)
