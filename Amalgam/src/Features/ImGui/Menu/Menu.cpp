@@ -402,23 +402,26 @@ void CMenu::MenuAimbot(int iTab)
 						}
 					} EndSection();
 				}
-				if (Section("Melee", 8))
-				{
-					FToggle(Vars::Aimbot::Melee::SwingPrediction, FToggleEnum::Left);
-					FToggle(Vars::Aimbot::Melee::AutoBackstab, FToggleEnum::Left);
-					SameLine(GetWindowWidth() - H::Draw.Scale(33));
-					if (IconButton(ICON_MD_KEYBOARD_ARROW_DOWN))
-						OpenPopup("Auto Backstab");
 
-					SetNextWindowSize({ H::Draw.Scale(300), 0 });
-					if (FBeginPopup("Auto Backstab"))
-					{
-						FToggle(Vars::Aimbot::Melee::IgnoreRazorback);
+            if (Section("Melee", 8))
+            {
+				    FDropdown(Vars::Aimbot::Melee::AutoWrench);
+                FToggle(Vars::Aimbot::Melee::SwingPrediction, FToggleEnum::Left);
+                FToggle(Vars::Aimbot::Melee::AutoBackstab, FToggleEnum::Left);
+                SameLine(GetWindowWidth() - H::Draw.Scale(33));
+                if (IconButton(ICON_MD_KEYBOARD_ARROW_DOWN))
+                    OpenPopup("Auto Backstab");
 
-						EndPopup();
-					}
+                SetNextWindowSize({ H::Draw.Scale(300), 0 });
+                if (FBeginPopup("Auto Backstab"))
+                {
+                    FToggle(Vars::Aimbot::Melee::IgnoreRazorback);
 
-				} EndSection();
+                    EndPopup();
+                }
+            }
+            EndSection();
+
 				if (Vars::Debug::Options.Value)
 				{
 					if (Section("##Debug Melee"))

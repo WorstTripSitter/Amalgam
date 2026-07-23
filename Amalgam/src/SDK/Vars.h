@@ -393,6 +393,37 @@ NAMESPACE_BEGIN(Vars)
 			CVar(SwingPrediction, "Swing prediction", true);
 			CVar(WhipTeam, "Whip team", false);
 
+			CVarEnum(AutoWrench, "Auto Wrench", 0b000, DROPDOWN_MULTI, "Off", VA_LIST(
+				"Active",
+				"Remove Sappers",
+				"##Divider",
+				"Target Sentries",
+				"Repair",
+				"Upgrade",
+				"Replenish Ammo",
+				"Replenish Rockets",
+				"##Divider",
+				"Target Dispensers",
+				"Repair",
+				"Upgrade",
+				"##Divider",
+				"Target Teleporters",
+				"Repair",
+				"Upgrade"),
+             Active = 1 << 0,
+             RemoveSappers = 1 << 1,
+             TargetSentries = 1 << 2,
+             RepairSentries = 1 << 3,
+             UpgradeSentries = 1 << 4,
+             ReplenishSentryAmmo = 1 << 5,
+             ReplenishSentryRockets = 1 << 6,
+             TargetDispensers = 1 << 7,
+             RepairDispensers = 1 << 8,
+             UpgradeDispensers = 1 << 9,
+             TargetTeleporters = 1 << 10,
+             RepairTeleporters = 1 << 11,
+             UpgradeTeleporters = 1 << 12);
+
 			CVar(SwingTicks, "Swing ticks", 13, NOSAVE | DEBUGVAR | SLIDER_MIN, 0, 14);
 			CVar(SwingPredictLag, "Swing predict lag", true, NOSAVE | DEBUGVAR);
 			CVarEnum(SwingValidateMode, "Swing validate mode", 0, NOSAVE | DEBUGVAR, nullptr,

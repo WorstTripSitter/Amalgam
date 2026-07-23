@@ -7,19 +7,60 @@
 #include "../../Visuals/Visuals.h"
 #include "../../AntiCheatCompatibility/AntiCheatCompatibility.h"
 
-static inline bool AimFriendlyBuilding(CBaseObject* pBuilding)
+bool CAimbotMelee::ShouldTargetTeamBuildings(CBaseObject* TeamBuilding)
 {
-	if (!pBuilding->m_bMiniBuilding() && pBuilding->m_iUpgradeLevel() != 3 || pBuilding->m_iHealth() < pBuilding->m_iMaxHealth() || pBuilding->m_bHasSapper())
-		return true;
+    if (!(Vars::Aimbot::Melee::AutoWrench.Value & Vars::Aimbot::Melee::AutoWrenchEnum::Active))
+        return false;
 
-	if (pBuilding->IsSentrygun())
-	{
-		int iShells, iMaxShells, iRockets, iMaxRockets; pBuilding->As<CObjectSentrygun>()->GetAmmoCount(iShells, iMaxShells, iRockets, iMaxRockets);
-		if (iShells < iMaxShells || iRockets < iMaxRockets)
-			return true;
-	}
+    if (Vars::Aimbot::Melee::AutoWrench.Value & Vars::Aimbot::Melee::AutoWrenchEnum::RemoveSappers && TeamBuilding->m_bHasSapper())
+        return true;
 
-	return false;
+    if (TeamBuilding->IsSentrygun())
+    {
+        if (!(Vars::Aimbot::Melee::AutoWrench.Value & Vars::Aimbot::Melee::AutoWrenchEnum::TargetSentries))
+            return false;
+
+        if (Vars::Aimbot::Melee::AutoWrench.Value & Vars::Aimbot::Melee::AutoWrenchEnum::RepairSentries && TeamBuilding->m_iHealth() < TeamBuilding->m_iMaxHealth())
+            return true;
+
+        if (Vars::Aimbot::Melee::AutoWrench.Value & Vars::Aimbot::Melee::AutoWrenchEnum::UpgradeSentries && !TeamBuilding->m_bMiniBuilding() && TeamBuilding->m_iUpgradeLevel() != 3)
+            return true;
+
+        int Ammo, MaxAmmo, Rockets, MaxRockets;
+        TeamBuilding->As<CObjectSentrygun>()->GetAmmoCount(Ammo, MaxAmmo, Rockets, MaxRockets);
+
+        if (Vars::Aimbot::Melee::AutoWrench.Value & Vars::Aimbot::Melee::AutoWrenchEnum::ReplenishSentryAmmo && Ammo < MaxAmmo)
+            return true;
+
+        if (Vars::Aimbot::Melee::AutoWrench.Value & Vars::Aimbot::Melee::AutoWrenchEnum::ReplenishSentryRockets && Rockets < MaxRockets)
+            return true;
+    }
+
+    if (TeamBuilding->IsDispenser())
+    {
+        if (!(Vars::Aimbot::Melee::AutoWrench.Value & Vars::Aimbot::Melee::AutoWrenchEnum::TargetDispensers))
+            return false;
+
+        if (Vars::Aimbot::Melee::AutoWrench.Value & Vars::Aimbot::Melee::AutoWrenchEnum::RepairDispensers && TeamBuilding->m_iHealth() < TeamBuilding->m_iMaxHealth())
+            return true;
+
+        if (Vars::Aimbot::Melee::AutoWrench.Value & Vars::Aimbot::Melee::AutoWrenchEnum::UpgradeDispensers && TeamBuilding->m_iUpgradeLevel() != 3)
+            return true;
+    }
+
+    if (TeamBuilding->IsTeleporter())
+    {
+        if (!(Vars::Aimbot::Melee::AutoWrench.Value & Vars::Aimbot::Melee::AutoWrenchEnum::TargetTeleporters))
+            return false;
+
+        if (Vars::Aimbot::Melee::AutoWrench.Value & Vars::Aimbot::Melee::AutoWrenchEnum::RepairTeleporters && TeamBuilding->m_iHealth() < TeamBuilding->m_iMaxHealth())
+            return true;
+
+        if (Vars::Aimbot::Melee::AutoWrench.Value & Vars::Aimbot::Melee::AutoWrenchEnum::UpgradeTeleporters && TeamBuilding->m_iUpgradeLevel() != 3)
+            return true;
+    }
+
+    return false;
 }
 
 static inline std::vector<Target_t> GetTargets(CTFPlayer* pLocal, CTFWeaponBase* pWeapon)
@@ -75,7 +116,7 @@ static inline std::vector<Target_t> GetTargets(CTFPlayer* pLocal, CTFWeaponBase*
 				continue;
 
 			bool bTeam = pEntity->m_iTeamNum() == pLocal->m_iTeamNum();
-			if (bTeam && (bWrench && !AimFriendlyBuilding(pEntity->As<CBaseObject>()) || bSapper && !pEntity->As<CBaseObject>()->m_bHasSapper()))
+			if (bTeam && (bWrench && !F::AimbotMelee.ShouldTargetTeamBuildings(pEntity->As<CBaseObject>()) || bSapper && !pEntity->As<CBaseObject>()->m_bHasSapper()))
 				continue;
 
 			float flFOVTo; Vec3 vPos, vAngleTo;
