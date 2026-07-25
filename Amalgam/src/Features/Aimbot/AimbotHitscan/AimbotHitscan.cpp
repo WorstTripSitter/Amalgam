@@ -8,111 +8,57 @@
 #include "../../Visuals/Visuals.h"
 #include "../../AntiCheatCompatibility/AntiCheatCompatibility.h"
 
-CTFPlayer* last_target = nullptr;
-float          next_target_delay = 0.f;
-int            heal_type = 0;
-int            heal_target_maxhp = 0;
-int            in_attack_spam = 0;
-
-namespace Vars::Aimbot::MediGun
-{
-    inline auto PreferFriends = false;
-}
-
-int GetHealPriority(CTFPlayer* LocalPlayer, CTFWeaponBase* LocalWeapon, CBaseEntity* Entity)
-{
-	if (!Entity || Entity->IsDormant())
-		return 0;
-
-	if (Entity->IsPlayer())
-	{
-	   const auto Player = Entity->As<CTFPlayer>();
-	   if (!Player)
-			return 0;
-
-		int priority = 0;
-		int health = Player->m_iHealth();
-		int max_health = Player->GetMaxHealth();
-
-		// Heal-rate will be affected if their heal is greater than max health.
-		if (health < max_health)
-			priority++;
-
-		max_health *= 0.25f;
-		while (max_health > 1 && health < max_health) {
-			priority++;
-			max_health *= 0.25f;
-		}
-
-		auto healers = Player->m_nNumHealers();
-		if (healers > 0)
-		{
-			CTFPlayer* heal_target = LocalWeapon->As<CWeaponMedigun>()->m_hHealingTarget().Get()->As<CTFPlayer>();
-			if (heal_target != nullptr && heal_target == Player)
-				healers--;
-
-			priority -= healers;
-		}
-
-	   return priority;
-	}
-
-	return 0;
-}
-
-float get_overheal_expert_mod(CTFWeaponBase* LocalWeapon) {
-	float overheal_expert = (float)SDK::AttribHookValue(0, ("overheal_expert"), LocalWeapon, 0, 1);
-	return overheal_expert > 0.f ? overheal_expert / 4.f : 0.f;
-}
-
 bool ShouldHealPlayer(CWeaponMedigun* LocalMedigun, CTFPlayer* Player)
 {
-	Timer SwitchDelay = {};
+    if (!LocalMedigun || !Player)
+        return false;
 
-	if (LocalMedigun->m_hHealingTarget().Get())
-	{
-		static CBaseEntity* LastHealTarget = {};
+    Timer SwitchDelay = {};
 
-		if (LocalMedigun->m_bChargeRelease())
-		{
-			if (LocalMedigun->m_hHealingTarget().Get() == Player && SwitchDelay.Run(2.5))
-				return false;
-		}
-		else
-		{
-			if (Player->IsInvulnerable())
-				return false;
+    if (LocalMedigun->m_hHealingTarget().Get())
+    {
+        static CBaseEntity* LastHealTarget = {};
 
-			if (LocalMedigun->m_hHealingTarget().Get() == Player && LastHealTarget == Player && SwitchDelay.Run(2.5))
-				return false;
+        if (LocalMedigun->m_bChargeRelease())
+        {
+            if (LocalMedigun->m_hHealingTarget().Get() == Player && SwitchDelay.Run(2.5))
+                return false;
+        }
+        else
+        {
+            if (Player->IsInvulnerable())
+                return false;
 
-			const auto PlayerResource = H::Entities.GetResource();
-			auto MaxBuffedHealth = PlayerResource->m_iMaxBuffedHealth(Player->entindex());
-			const auto OverhealExpert = get_overheal_expert_mod(LocalMedigun);
-			if (OverhealExpert > 0.0f)
-				MaxBuffedHealth += Player->GetMaxHealth() * OverhealExpert;
+            if (LocalMedigun->m_hHealingTarget().Get() == Player && LastHealTarget == Player && SwitchDelay.Run(2.5))
+                return false;
 
-			auto Multiplier = 1.44f;
-			if (LocalMedigun->GetMedigunType() == MEDIGUN_QUICKFIX)
-				Multiplier = 1.24f;
+            const auto PlayerResource = H::Entities.GetResource();
+            auto MaxBuffedHealth = PlayerResource->m_iMaxBuffedHealth(Player->entindex());
+            const auto OverhealExpert = LocalMedigun->GetOverhealExpertModifier();
+            if (OverhealExpert > 0.0f)
+                MaxBuffedHealth += Player->GetMaxHealth() * OverhealExpert;
 
-			if (static_cast<float>(Player->m_iHealth()) >= static_cast<float>(MaxBuffedHealth) * Multiplier)
-				return false;
+            auto Multiplier = 1.44f;
+            if (LocalMedigun->GetMedigunType() == MEDIGUN_QUICKFIX)
+                Multiplier = 1.24f;
 
-			CUtlVector<CBaseEntity*> ItemList;
-			const int BackstabShield = SDK::AttribHookValue(0, "set_blockbackstab_once", Player, &ItemList);
-			if (BackstabShield && ItemList.Count())
-			{
-				const auto Item = ItemList.Element(0);
-				if (Item && Item->ShouldDraw() && Player->m_iHealth() >= Player->GetMaxHealth())
-					return false;
-			}
-		}
+            if (static_cast<float>(Player->m_iHealth()) >= static_cast<float>(MaxBuffedHealth) * Multiplier)
+                return false;
 
-		LastHealTarget = LocalMedigun->m_hHealingTarget().Get();
-	}
+            CUtlVector<CBaseEntity*> ItemList;
+            const int BackstabShield = SDK::AttribHookValue(0, "set_blockbackstab_once", Player, &ItemList);
+            if (BackstabShield && ItemList.Count())
+            {
+                const auto Item = ItemList.Element(0);
+                if (Item && Item->ShouldDraw() && Player->m_iHealth() >= Player->GetMaxHealth())
+                    return false;
+            }
+        }
 
-	return true;
+        LastHealTarget = LocalMedigun->m_hHealingTarget().Get();
+    }
+
+    return true;
 }
 
 static inline std::vector<Target_t> GetTargets(CTFPlayer* pLocal, CTFWeaponBase* pWeapon)
