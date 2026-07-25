@@ -649,14 +649,16 @@ medigun_resist_types_t CWeaponMedigun::GetResistType()
 	return medigun_resist_types_t(nCurrentActiveResist);
 }
 
-
+float CWeaponMedigun::GetOverhealExpertModifier()
+{
+	const auto OverhealExpert = SDK::AttribHookValue(0, "overheal_expert", this, nullptr, true);
+	return OverhealExpert > 0.0f ? OverhealExpert / 4.0f : 0.0f;
+}
 
 int CTFPipebombLauncher::GetDetonateType()
 {
 	return SDK::AttribHookValue(0, "set_detonate_mode", this);
 }
-
-
 
 int CTFSniperRifle::GetRifleType()
 {

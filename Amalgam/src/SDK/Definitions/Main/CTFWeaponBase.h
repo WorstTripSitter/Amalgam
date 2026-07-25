@@ -280,6 +280,7 @@ public:
 	int GetMedigunType();
 	MedigunChargeTypes GetChargeType();
 	medigun_resist_types_t GetResistType();
+	float GetOverhealExpertModifier();
 };
 
 class CTFPipebombLauncher : public CTFWeaponBase
