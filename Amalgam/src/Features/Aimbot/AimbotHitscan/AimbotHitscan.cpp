@@ -100,10 +100,10 @@ bool ShouldHealPlayer(CWeaponMedigun* LocalMedigun, CTFPlayer* Player)
 				return false;
 
 			CUtlVector<CBaseEntity*> ItemList;
-			int BackstabShield = SDK::AttribHookValue(0, "set_blockbackstab_once", Player, &ItemList);
+			const int BackstabShield = SDK::AttribHookValue(0, "set_blockbackstab_once", Player, &ItemList);
 			if (BackstabShield && ItemList.Count())
 			{
-				auto Item = ItemList.Element(0);
+				const auto Item = ItemList.Element(0);
 				if (Item && Item->ShouldDraw() && Player->m_iHealth() >= Player->GetMaxHealth())
 					return false;
 			}
@@ -150,56 +150,6 @@ static inline std::vector<Target_t> GetTargets(CTFPlayer* pLocal, CTFWeaponBase*
                      const auto LocalMediGun = pWeapon->As<CWeaponMedigun>();
 					 if (!ShouldHealPlayer(LocalMediGun, Player))
                          continue;
-                     /*if (LocalMediGun->m_hHealingTarget().Get())
-                     {
-                         static CBaseEntity* LastHealTarget = {};
-                         Timer timer = {};
-
-                         if (LocalMediGun->m_bChargeRelease())
-                         {
-                             if (LocalMediGun->m_hHealingTarget().Get() == Player && timer.Run(1.5))
-                                 continue;
-                         }
-                         else
-                         {
-                             if (Player->IsInvulnerable())
-                                 continue;
-
-                             if (LocalMediGun->m_hHealingTarget().Get() == Player && LastHealTarget == Player && timer.Run(1.5))
-                             {
-                                 continue;
-                             }
-
-							 const auto PlayerResource = H::Entities.GetResource();
-							 auto max_buffed_health = PlayerResource->m_iMaxBuffedHealth(Player->entindex());
-							 const auto overheal_expert = get_overheal_expert_mod(pWeapon);
-							 if (overheal_expert > 0.0f)
-								 max_buffed_health += Player->GetMaxHealth() * overheal_expert;
-
-                             auto mult{1.44f};
-
-                             if (LocalMediGun->GetMedigunType() == MEDIGUN_QUICKFIX)
-                             {
-                                 mult = 1.24f;
-                             }
-
-                             if (static_cast<float>(Player->m_iHealth()) >= static_cast<float>(max_buffed_health) * mult)
-                             {
-                                 continue;
-                             }
-
-                             CUtlVector<CBaseEntity*> itemList;
-                             int iBackstabShield = SDK::AttribHookValue(0, "set_blockbackstab_once", pEntity, &itemList);
-                             if (iBackstabShield && itemList.Count())
-                             {
-                                 auto item = itemList.Element(0);
-                                 if (item && item->ShouldDraw() && Player->m_iHealth() >= Player->GetMaxHealth())
-                                     continue;
-                             }
-                         }
-
-                         LastHealTarget = LocalMediGun->m_hHealingTarget().Get();
-                     }*/
                  }
              }
 				if (!SDK::FriendlyFire() && SDK::AttribHookValue(0, "jarate_duration", pWeapon) > 0)
