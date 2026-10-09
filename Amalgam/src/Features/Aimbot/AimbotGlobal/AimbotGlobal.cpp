@@ -15,6 +15,59 @@ std::vector<Target_t> CAimbotGlobal::ManageTargets(std::vector<Target_t>(*GetTar
 	return vTargets;
 }
 
+// TODO: account for all types of healing, including rescue ranger for buildings
+float CAimbotGlobal::GetHealPriority(const CTFPlayer* LocalPlayer, const CTFWeaponBase* LocalWeapon, CBaseEntity* Target)
+{
+	if (!LocalPlayer || !LocalWeapon || !Target)
+		return -1.0f;
+
+	if (Target->IsPlayer())
+	{
+		const auto Player = Target->As<CTFPlayer>();
+		if (Player->deadflag() || Player->IsInvisible() || Player->IsAGhost())
+			return -1.0f;
+
+		const auto CurrentHealth = Player->m_iHealth();
+		const auto MaxHealth = Player->GetMaxHealth();
+		const auto PlayerResource = H::Entities.GetResource();
+		const auto MaxBuffedHealth = PlayerResource->m_iMaxBuffedHealth(Player->entindex());
+		const auto HealthFraction = std::clamp(static_cast<float>(CurrentHealth) / MaxHealth, 0.0f, 1.0f + MaxBuffedHealth);
+		const auto HealthMissing = std::clamp(1.0f - HealthFraction, 0.0f, 1.0f);
+
+		auto Priority = powf(HealthMissing, 2.0f) * 100.0f;
+
+		if (HealthFraction < 0.35f)
+			Priority += 100.0f;
+
+		if (HealthFraction >= 1.0f)
+		{
+			const auto Overheal = HealthFraction - 1.0f;
+			constexpr auto PeakOverheal = 0.10f;
+			constexpr auto SlightMax = 0.25f;
+			constexpr auto PeakScore = 12.0f;
+			constexpr auto EdgeScore = 6.0f;
+
+			if (Overheal <= PeakOverheal)
+				Priority = EdgeScore + (PeakScore - EdgeScore) * (Overheal / PeakOverheal);
+			else if (Overheal <= SlightMax)
+				Priority = PeakScore - (PeakScore - EdgeScore) * ((Overheal - PeakOverheal) / (SlightMax - PeakOverheal));
+			else
+				Priority = EdgeScore * (0.5f - Overheal) / (0.5f - SlightMax);
+
+			// this may be in the wrong spot
+			if (HealthMissing > 0.0f)
+				Priority += PeakScore;
+		}
+
+		return Priority;
+	}
+
+	if (Target->GetClassID() == ETFClassID::CTFReviveMarker)
+		return 100000.0f;
+
+	return 0.0f;
+}
+
 void CAimbotGlobal::SortTargetsPre(std::vector<Target_t>& vTargets, int iMethod)
 {
 	switch (iMethod)
@@ -30,6 +83,12 @@ void CAimbotGlobal::SortTargetsPre(std::vector<Target_t>& vTargets, int iMethod)
 		std::sort(vTargets.begin(), vTargets.end(), [&](const Target_t& a, const Target_t& b) -> bool
 		{
 			return a.m_flDistTo < b.m_flDistTo;
+		});
+		break;
+	case Vars::Aimbot::General::TargetSelectionEnum::HealPriority:
+		std::sort(vTargets.begin(), vTargets.end(), [&](const Target_t& a, const Target_t& b) -> bool
+		{
+			return GetHealPriority(H::Entities.GetLocal(), H::Entities.GetWeapon(), a.m_pEntity) > GetHealPriority(H::Entities.GetLocal(), H::Entities.GetWeapon(), b.m_pEntity);
 		});
 		break;
 	}
