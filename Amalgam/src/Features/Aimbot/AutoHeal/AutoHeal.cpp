@@ -29,7 +29,7 @@ void CAutoHeal::AutoHeal(CUserCmd* pCmd)
 	m_iTargetIdx = pTarget->entindex();
 
 	const bool AutoSwitchEnabled = Vars::Aimbot::Healing::AutoArrow.Value && Vars::Aimbot::Healing::AutoCrusaderCrossbowSwitch.Value;
-	if (m_pLocal->GetWeaponFromSlot(SLOT_PRIMARY)->GetWeaponID() == TF_WEAPON_CROSSBOW && AutoSwitchEnabled && !(pCmd->buttons & IN_ATTACK2) && !pTarget->IsUbered() && !pTarget->InCond(TF_COND_MEGAHEAL) && !m_pLocal->IsUbered())
+	if (m_pLocal->GetWeaponFromSlot(SLOT_PRIMARY)->GetWeaponID() == TF_WEAPON_CROSSBOW && AutoSwitchEnabled && !(pCmd->buttons & IN_ATTACK2) && !pTarget->IsUbered() && pTarget->GetClassID() != ETFClassID::CTFReviveMarker && !pTarget->InCond(TF_COND_MEGAHEAL) && !m_pLocal->IsUbered())
 	{
 		if (const auto CrusaderCrossbow = m_pLocal->GetWeaponFromSlot(SLOT_PRIMARY))
 		{

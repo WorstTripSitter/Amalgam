@@ -72,6 +72,21 @@ static inline std::vector<Target_t> GetTargets(CTFPlayer* pLocal, CTFWeaponBase*
 			vTargets.emplace_back(pEntity, TargetEnum::Player, vPos, vAngleTo, flFOVTo, flDistTo, iPriority);
 		}
 
+		if (bHeal)
+		{
+			for (auto pEntity : H::Entities.GetGroup(EntityEnum::ReviveMarkers))
+			{
+				float flFOVTo; Vec3 vPos, vAngleTo;
+				if (!F::AimbotGlobal.EntityCenterInFOV(pEntity, vLocalPos, vLocalAngles, flFOVTo, vPos, vAngleTo))
+					continue;
+
+				float flDistTo = vLocalPos.DistToSqr(vPos);
+				int iPriority = F::AimbotGlobal.GetPriority(pEntity->entindex());
+				vTargets.emplace_back(pEntity, TargetEnum::Player, vPos, vAngleTo, flFOVTo, flDistTo, iPriority);
+			}
+		}
+
+
 		if (pWeapon->GetWeaponID() == TF_WEAPON_MEDIGUN)
 			return vTargets;
 	}
