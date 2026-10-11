@@ -418,6 +418,9 @@ NAMESPACE_BEGIN(Vars)
 			CVar(AutoVaccinator, "Auto vaccinator", false);
 			CVar(ActivateOnVoice, "Activate on voice", false);
 
+			CVar(AutoCrusaderCrossbowSwitch, "Auto Crusader Crossbow Switch", false);
+			CVar(AutoCrusaderCrossbowSwitch_HealthThreshold, "Health Threshold", 50, SLIDER_CLAMP, 1, 100, 1, "%i%%");
+
 			CVar(AutoVaccinatorBulletScale, "Auto vaccinator bullet scale", 100.f, NOSAVE | DEBUGVAR | SLIDER_MIN | SLIDER_PRECISION, 0.f, 200.f, 10.f, "%g%%");
 			CVar(AutoVaccinatorBlastScale, "Auto vaccinator blast scale", 100.f, NOSAVE | DEBUGVAR | SLIDER_MIN | SLIDER_PRECISION, 0.f, 200.f, 10.f, "%g%%");
 			CVar(AutoVaccinatorFireScale, "Auto vaccinator fire scale", 100.f, NOSAVE | DEBUGVAR | SLIDER_MIN | SLIDER_PRECISION, 0.f, 200.f, 10.f, "%g%%");

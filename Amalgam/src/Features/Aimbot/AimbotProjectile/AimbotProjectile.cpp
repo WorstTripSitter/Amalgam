@@ -8,6 +8,8 @@
 #include "../../AntiCheatCompatibility/AntiCheatCompatibility.h"
 #include <numeric>
 
+#include "../AutoHeal/AutoHeal.h"
+
 //#define SPLASH_DEBUG1 // trace splash visualization
 //#define SPLASH_DEBUG2 // plane splash visualization
 //#define SPLASH_DEBUG3 // points visualization
@@ -2043,7 +2045,15 @@ bool CAimbotProjectile::RunMain(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUser
 		}
 
 		if (nWeaponID != TF_WEAPON_GRAPPLINGHOOK)
+		{
 			F::Aimbot.m_bRan = G::Attacking = SDK::IsAttacking(pLocal, pWeapon, pCmd, true);
+
+			if (G::Attacking = nWeaponID == TF_WEAPON_LASER_POINTER ? 1 : SDK::IsAttacking(pLocal, pWeapon, pCmd, true))
+			{
+				if (F::AutoHeal.m_iAutoSwitch == 1)
+					F::AutoHeal.m_iAutoSwitch = 2;
+			}
+		}
 		else
 		{
 			Vec3 vOriginalAngles = pCmd->viewangles; int iOriginalButtons = pCmd->buttons;
@@ -2081,6 +2091,14 @@ bool CAimbotProjectile::RunMain(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUser
 
 void CAimbotProjectile::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd)
 {
+	int iOldAimType = Vars::Aimbot::General::AimType.Value;
+	bool bOldAutoShoot = Vars::Aimbot::General::AutoShoot.Value;
+	if (F::AutoHeal.m_iAutoSwitch != 0)
+	{
+		Vars::Aimbot::General::AimType.Value = Vars::Aimbot::General::AimTypeEnum::Silent;
+		Vars::Aimbot::General::AutoShoot.Value = true;
+	}
+
 	const bool bSuccess = RunMain(pLocal, pWeapon, pCmd);
 #ifdef SPLASH_DEBUG5
 	if (Vars::Aimbot::General::AimType.Value && !s_mTraceCount.empty())
@@ -2094,6 +2112,15 @@ void CAimbotProjectile::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd*
 	}
 	s_mTraceCount.clear();
 #endif
+
+	if (F::AutoHeal.m_iAutoSwitch != 0)
+	{
+		if (!bSuccess && F::AutoHeal.m_flAutoSwitchExpireTime < I::GlobalVars->curtime)
+			F::AutoHeal.m_iAutoSwitch = 2;
+
+		Vars::Aimbot::General::AimType.Value = iOldAimType;
+		Vars::Aimbot::General::AutoShoot.Value = bOldAutoShoot;
+	}
 
 	float flAmount = 0.f;
 	if (pWeapon->GetWeaponID() == TF_WEAPON_PIPEBOMBLAUNCHER)

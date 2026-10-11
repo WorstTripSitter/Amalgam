@@ -220,7 +220,8 @@ void CMenu::MenuAimbot(int iTab)
 						}
 					} EndSection();
 				}
-				if (Section("Healing"))
+
+				if (Section("Auto Heal"))
 				{
 					FDropdown(Vars::Aimbot::Healing::HealPriority, FDropdownEnum::Left);
 					FDropdown(Vars::Aimbot::Healing::DangerIgnore, FDropdownEnum::Right);
@@ -230,7 +231,18 @@ void CMenu::MenuAimbot(int iTab)
 					FToggle(Vars::Aimbot::Healing::AutoSandvich, FToggleEnum::Right);
 					FToggle(Vars::Aimbot::Healing::AutoVaccinator, FToggleEnum::Left);
 					FToggle(Vars::Aimbot::Healing::ActivateOnVoice, FToggleEnum::Right);
-				} EndSection();
+
+					// Auto Crusader Crosbow Switch
+					{
+						FToggle(Vars::Aimbot::Healing::AutoCrusaderCrossbowSwitch, FToggleEnum::Left);
+						FTooltip("Quickly switch to the Crusader Crossbow to heal targets below health threshold");
+
+						FSlider(Vars::Aimbot::Healing::AutoCrusaderCrossbowSwitch_HealthThreshold, FSliderEnum::Right);
+						FTooltip("Required health threshold for the Crusader Crossbow switch");
+					}
+				}
+				EndSection();
+
 				if (Vars::Debug::Options.Value)
 				{
 					if (Section("##Debug Healing"))

@@ -37,6 +37,9 @@ public:
 	void Draw(CTFPlayer* pLocal);
 #endif
 
+	float m_flAutoSwitchExpireTime = 0.f;
+	int m_iAutoSwitch = 0;
+	int m_iTargetIdx = -1;
 	std::unordered_mapset<int> m_mMedicCallers = {};
 };
 

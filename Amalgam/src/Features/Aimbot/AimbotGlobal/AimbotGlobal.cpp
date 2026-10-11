@@ -4,15 +4,33 @@
 #include "../../Players/PlayerUtils.h"
 #include "../../Ticks/Ticks.h"
 #include "../../EnginePrediction/EnginePrediction.h"
+#include "../AutoHeal/AutoHeal.h"
 
-std::vector<Target_t> CAimbotGlobal::ManageTargets(std::vector<Target_t>(*GetTargets)(CTFPlayer* pLocal, CTFWeaponBase* pWeapon), CTFPlayer* pLocal, CTFWeaponBase* pWeapon,
-	int iMethod, int iMaxTargets)
+static int GetPriorityIndex(CTFWeaponBase* LocalWeapon)
 {
-	auto vTargets = GetTargets(pLocal, pWeapon);
-	SortTargetsPre(vTargets, iMethod);
-	vTargets.resize(std::min(size_t(iMaxTargets), vTargets.size()));
-	SortTargetsPost(vTargets, iMethod);
-	return vTargets;
+	if (LocalWeapon->GetSlot() != SLOT_MELEE)
+	{
+		if (F::AutoHeal.m_iAutoSwitch)
+			return F::AutoHeal.m_iTargetIdx;
+	}
+
+	return -1;
+}
+
+std::vector<Target_t> CAimbotGlobal::ManageTargets(std::vector<Target_t>(*GetTargets)(CTFPlayer* pLocal, CTFWeaponBase* pWeapon), CTFPlayer* LocalPlayer, CTFWeaponBase* LocalWeapon, const int SortMethod, const int MaxTargets)
+{
+	auto ValidTargets = GetTargets(LocalPlayer, LocalWeapon);
+	SortTargetsPre(ValidTargets, SortMethod);
+
+	const auto PriorityIndex = GetPriorityIndex(LocalWeapon);
+	if (PriorityIndex > 0)
+		std::ranges::sort(ValidTargets, [&](const Target_t& a, const Target_t& b) -> bool { return a.m_pEntity->entindex() == PriorityIndex; });
+
+	ValidTargets.resize(std::min(static_cast<size_t>(MaxTargets), ValidTargets.size()));
+	if (PriorityIndex <= 0)
+		SortTargetsPost(ValidTargets, SortMethod);
+
+	return ValidTargets;
 }
 
 // TODO: account for all types of healing, including rescue ranger for buildings

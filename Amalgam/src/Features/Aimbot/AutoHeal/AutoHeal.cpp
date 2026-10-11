@@ -21,9 +21,43 @@ void CAutoHeal::AutoHeal(CUserCmd* pCmd)
 	if (!Vars::Aimbot::Healing::AutoHeal.Value)
 		return;
 
-	auto pTarget = m_pWeapon->m_hHealingTarget().Get()->As<CTFPlayer>();
+	auto pTargetEntity = m_pWeapon->m_hHealingTarget().Get();
+	auto pTarget = pTargetEntity ? pTargetEntity->As<CTFPlayer>() : nullptr;
 	if (!pTarget || pCmd->buttons & IN_ATTACK && !(G::LastUserCmd->buttons & IN_ATTACK))
 		return;
+
+	m_iTargetIdx = pTarget->entindex();
+
+	const bool AutoSwitchEnabled = Vars::Aimbot::Healing::AutoArrow.Value && Vars::Aimbot::Healing::AutoCrusaderCrossbowSwitch.Value;
+	if (m_pLocal->GetWeaponFromSlot(SLOT_PRIMARY)->GetWeaponID() == TF_WEAPON_CROSSBOW && AutoSwitchEnabled && !(pCmd->buttons & IN_ATTACK2) && !pTarget->IsUbered() && !pTarget->InCond(TF_COND_MEGAHEAL) && !m_pLocal->IsUbered())
+	{
+		if (const auto CrusaderCrossbow = m_pLocal->GetWeaponFromSlot(SLOT_PRIMARY))
+		{
+			float DeployTimeMultiplier = 1.0f;
+			SDK::AttribHookValue(DeployTimeMultiplier, "mult_deploy_time", m_pLocal);
+			SDK::AttribHookValue(DeployTimeMultiplier, "mult_single_wep_deploy_time", CrusaderCrossbow);
+			DeployTimeMultiplier = std::max(DeployTimeMultiplier, 0.00001f);
+
+			const float DeployTime = 0.5f * DeployTimeMultiplier;
+			const float NextPrimaryAttack = CrusaderCrossbow->m_flNextPrimaryAttack();
+			const float HealthPercent = pTarget->GetMaxHealth() ? static_cast<float>(pTarget->m_iHealth()) / pTarget->GetMaxHealth() * 100.0f : 100.0f;
+			if (NextPrimaryAttack - DeployTime <= I::GlobalVars->curtime && HealthPercent < Vars::Aimbot::Healing::AutoCrusaderCrossbowSwitch_HealthThreshold.Value)
+			{
+				const float Charge = m_pWeapon->GetMedigunType() == MEDIGUN_RESIST ? 0.25f : 96.0f;
+				if (m_pWeapon->m_flChargeLevel() < Charge
+					|| pTarget->InCond(TF_COND_BULLET_IMMUNE) || pTarget->InCond(TF_COND_MEDIGUN_UBER_BULLET_RESIST)
+					|| pTarget->InCond(TF_COND_BLAST_IMMUNE) || pTarget->InCond(TF_COND_MEDIGUN_UBER_BLAST_RESIST)
+					|| pTarget->InCond(TF_COND_FIRE_IMMUNE) || pTarget->InCond(TF_COND_MEDIGUN_UBER_FIRE_RESIST))
+				{
+					I::EngineClient->ClientCmd_Unrestricted("slot1");
+
+					m_flAutoSwitchExpireTime = NextPrimaryAttack > I::GlobalVars->curtime ? NextPrimaryAttack + 0.1f : I::GlobalVars->curtime + 1.1f;
+					m_iAutoSwitch = 1;
+					return;
+				}
+			}
+		}
+	}
 
 	std::vector<TickRecord*> vRecords = {};
 	if (!F::Backtrack.GetRecords(pTarget, vRecords))
@@ -577,7 +611,7 @@ void CAutoHeal::ActivateResistType(CUserCmd* pCmd, int iType)
 
 void CAutoHeal::AutoVaccinator(CUserCmd* pCmd)
 {
-	if (!Vars::Aimbot::Healing::AutoVaccinator.Value || m_pWeapon->GetMedigunType() != MEDIGUN_RESIST)
+	if (!Vars::Aimbot::Healing::AutoVaccinator.Value)
 		return;
 
 #ifdef DEBUG_VACCINATOR
@@ -633,10 +667,31 @@ void CAutoHeal::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd)
 {
 	if (pWeapon->GetWeaponID() != TF_WEAPON_MEDIGUN)
 	{
+		bool bAutoSwitch = m_iAutoSwitch != 0;
+		if (m_iAutoSwitch == 2 || !(Vars::Aimbot::Healing::AutoArrow.Value && Vars::Aimbot::Healing::AutoCrusaderCrossbowSwitch.Value) && bAutoSwitch)
+		{
+			I::EngineClient->ClientCmd_Unrestricted("slot2");
+			m_iAutoSwitch = 0;
+			return;
+		}
+
 		m_mMedicCallers.clear();
 		m_iResistType = -1;
 		m_flDamagedTime = 0.f;
+		if (!bAutoSwitch)
+			m_iTargetIdx = -1;
 		return;
+	}
+
+	if (m_iAutoSwitch == 1)
+	{
+		if (!(Vars::Aimbot::Healing::AutoArrow.Value && Vars::Aimbot::Healing::AutoCrusaderCrossbowSwitch.Value))
+			m_iAutoSwitch = 0;
+		else
+		{
+			I::EngineClient->ClientCmd_Unrestricted("slot1");
+			return;
+		}
 	}
 
 	m_pLocal = pLocal, m_pWeapon = pWeapon->As<CWeaponMedigun>();
@@ -656,7 +711,7 @@ void CAutoHeal::Event(IGameEvent* pEvent, uint32_t uHash)
 
 		//auto pLocal = H::Entities.GetLocal();
 		auto pWeapon = H::Entities.GetWeapon()->As<CWeaponMedigun>();
-		if (/*!pLocal ||*/ !pWeapon || pWeapon->GetWeaponID() != TF_WEAPON_MEDIGUN || pWeapon->GetMedigunType() != MEDIGUN_RESIST)
+		if (/*!pLocal ||*/ !pWeapon || pWeapon->GetWeaponID() != TF_WEAPON_MEDIGUN)
 			return;
 
 		int iVictim = I::EngineClient->GetPlayerForUserID(pEvent->GetInt("userid"));

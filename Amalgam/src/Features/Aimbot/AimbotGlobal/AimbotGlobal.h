@@ -28,8 +28,7 @@ struct Target_t
 class CAimbotGlobal
 {
 public:
-	std::vector<Target_t> ManageTargets(std::vector<Target_t>(*GetTargets)(CTFPlayer* pLocal, CTFWeaponBase* pWeapon), CTFPlayer* pLocal, CTFWeaponBase* pWeapon,
-		int iMethod = Vars::Aimbot::General::TargetSelection.Value, int iMaxTargets = Vars::Aimbot::General::MaxTargets.Value);
+	std::vector<Target_t> ManageTargets(std::vector<Target_t> (*GetTargets)(CTFPlayer* pLocal, CTFWeaponBase* pWeapon), CTFPlayer* LocalPlayer, CTFWeaponBase* LocalWeapon, int SortMethod = Vars::Aimbot::General::TargetSelection.Value, int MaxTargets = Vars::Aimbot::General::MaxTargets.Value);
 	static float GetHealPriority(const CTFPlayer* LocalPlayer, const CTFWeaponBase* LocalWeapon, CBaseEntity* Target);
 	void SortTargetsPre(std::vector<Target_t>& vTargets, int iMethod);
 	void SortTargetsPost(std::vector<Target_t>& vTargets, int iMethod);
