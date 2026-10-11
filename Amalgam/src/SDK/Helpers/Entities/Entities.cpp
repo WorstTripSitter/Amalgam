@@ -84,7 +84,7 @@ void CEntities::Store()
 		case ETFClassID::CTFProjectile_Flare:
 		case ETFClassID::CTFBaseProjectile:
 		case ETFClassID::CTFProjectile_EnergyRing:
-		//case ETFClassID::CTFProjectile_Syringe:
+			//case ETFClassID::CTFProjectile_Syringe:
 		{
 			if ((nClassID == ETFClassID::CTFProjectile_Cleaver || nClassID == ETFClassID::CTFStunBall) && pEntity->As<CTFGrenadePipebombProjectile>()->m_bTouched()
 				|| (nClassID == ETFClassID::CTFProjectile_Arrow || nClassID == ETFClassID::CTFProjectile_GrapplingHook) && !pEntity->m_MoveType())
@@ -149,6 +149,11 @@ void CEntities::Store()
 		case ETFClassID::CSniperDot:
 			m_aGroups[EntityEnum::SniperDots].push_back(pEntity);
 			break;
+		case ETFClassID::CTFReviveMarker:
+		{
+			m_aGroups[EntityEnum::ReviveMarkers].push_back(pEntity);
+			break;
+		}
 		}
 	}
 
