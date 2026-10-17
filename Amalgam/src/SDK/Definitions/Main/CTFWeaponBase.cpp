@@ -652,14 +652,14 @@ medigun_resist_types_t CWeaponMedigun::GetResistType()
 float CWeaponMedigun::GetHealRate()
 {
 	const float HealRate = m_pWeaponInfo()->GetWeaponData(GetWeaponID() == TF_WEAPON_MEDIGUN).m_nDamage;
-	SDK::AttribHookValue(HealRate, "mult_medigun_healrate", this);
+	SDK::AttribHookValue(HealRate, "healing_mastery", this);
 	return HealRate;
 }
 
 float CWeaponMedigun::GetHealRateForTarget(CTFPlayer* Target)
 {
 	const float HealRate = GetHealRate();
-	SDK::AttribHookValue(HealRate, "mult_medigun_healrate", this);
+	SDK::AttribHookValue(HealRate, "healing_mastery", this);
 	SDK::AttribHookValue(HealRate, "mult_health_fromhealers", Target);
 	return HealRate;
 }
@@ -669,7 +669,7 @@ int CWeaponMedigun::GetMaxBuffedHealthForTarget(CTFPlayer* Target)
 	const auto MaxHealth = Target->GetMaxHealth();
 
 	constexpr auto OverhealMultiplier = 1.0f;
-	SDK::AttribHookValue(OverhealMultiplier, "overheal_amount", this);
+	SDK::AttribHookValue(OverhealMultiplier, "overheal_expert", this);
 
 	constexpr auto PatientMultiplier = 1.0f;
 	SDK::AttribHookValue(PatientMultiplier, "mult_patient_overheal_penalty", Target);
