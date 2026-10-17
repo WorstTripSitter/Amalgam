@@ -259,7 +259,7 @@ void CAutoHeal::GetDangers(CTFPlayer* pTarget, bool bVaccinator, float& flBullet
 	float flFireResist = pTarget->InCond(TF_COND_FIRE_IMMUNE) ? 1.f : pTarget->InCond(TF_COND_MEDIGUN_UBER_FIRE_RESIST) ? 0.75f : pTarget->InCond(TF_COND_MEDIGUN_SMALL_FIRE_RESIST) ? -0.1f : 0.f;
 
 	float flLatency = F::Backtrack.GetReal();
-	int iPlayerHealth = pTarget->m_iHealth();
+	int iPlayerHealth = std::max(pTarget->m_iHealth(), 1);
 	Vec3 vTargetOrigin = PredictOrigin(pTarget->m_vecOrigin(), pTarget->m_vecVelocity(), pTarget->entindex() != I::EngineClient->GetLocalPlayer() ? flLatency : 0.f, true, pTarget->m_vecMins(), pTarget->m_vecMaxs(), pTarget->SolidMask());
 	Vec3 vTargetCenter = vTargetOrigin + pTarget->GetOffset() / 2;
 	Vec3 vTargetEye = vTargetOrigin + pTarget->GetViewOffset();
@@ -520,16 +520,9 @@ void CAutoHeal::GetDangers(CTFPlayer* pTarget, bool bVaccinator, float& flBullet
 		}
 	}
 
-	if (m_flDamagedTime <= TICK_INTERVAL)
-	{
-		if (pTarget->InCond(TF_COND_BURNING) || pTarget->InCond(TF_COND_BURNING_PYRO))
-		{
-			m_flDamagedTime = TICK_INTERVAL * 2;
-			m_iDamagedType = MEDIGUN_FIRE_RESIST;
-			m_flDamagedDPS = 8.f;
-		}
-	}
-	if (m_flDamagedTime = std::max(m_flDamagedTime - TICK_INTERVAL, 0.f))
+	// player_hurt only records damage to us or our heal target
+	bool bRecorded = pTarget->entindex() == I::EngineClient->GetLocalPlayer() || pTarget == m_pWeapon->m_hHealingTarget().Get();
+	if (bRecorded && m_flDamagedTime > 0.f)
 	{
 		switch (m_iDamagedType)
 		{
@@ -543,6 +536,8 @@ void CAutoHeal::GetDangers(CTFPlayer* pTarget, bool bVaccinator, float& flBullet
 			flFireDanger += m_flDamagedDPS / iPlayerHealth;
 		}
 	}
+	else if (pTarget->InCond(TF_COND_BURNING) || pTarget->InCond(TF_COND_BURNING_PYRO))
+		flFireDanger += 8.f / iPlayerHealth;
 
 	// ignore resistances we are already charged with, else scale
 	if (flBulletResist >= (bVaccinator ? 0.75f : 1.f))
@@ -643,6 +638,17 @@ void CAutoHeal::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd)
 	AutoHeal(pCmd);
 	ActivateOnVoice(pCmd); m_mMedicCallers.clear();
 	AutoVaccinator(pCmd);
+	m_flDamagedTime = std::max(m_flDamagedTime - TICK_INTERVAL, 0.f);
+}
+
+float CAutoHeal::GetDanger(CTFPlayer* pTarget)
+{
+	if (!m_pLocal || !m_pWeapon || !pTarget)
+		return 0.f;
+
+	float flBulletDanger = 0.f, flBlastDanger = 0.f, flFireDanger = 0.f;
+	GetDangers(pTarget, false, flBulletDanger, flBlastDanger, flFireDanger);
+	return flBulletDanger + flBlastDanger + flFireDanger;
 }
 
 void CAutoHeal::Event(IGameEvent* pEvent, uint32_t uHash)

@@ -33,6 +33,7 @@ private:
 public:
 	void Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd);
 	void Event(IGameEvent* pEvent, uint32_t uHash);
+	float GetDanger(CTFPlayer* pTarget);
 #ifdef DEBUG_VACCINATOR
 	void Draw(CTFPlayer* pLocal);
 #endif

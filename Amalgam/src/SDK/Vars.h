@@ -412,6 +412,7 @@ NAMESPACE_BEGIN(Vars)
 				Friends = 1 << 0, Party = 1 << 1, Unprioritized = 1 << 2, Ignored = 1 << 3,
 				Shared = Friends | Party | Unprioritized);
 			CVar(AutoHeal, "Auto heal", false);
+			CVar(DangerPriority, "Danger priority", false);
 			CVar(AutoArrow, "Auto arrow", false);
 			CVar(AutoRepair, "Auto repair", false);
 			CVar(AutoSandvich, "Auto sandvich", false);
