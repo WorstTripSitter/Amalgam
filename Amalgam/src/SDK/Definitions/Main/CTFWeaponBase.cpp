@@ -649,7 +649,36 @@ medigun_resist_types_t CWeaponMedigun::GetResistType()
 	return medigun_resist_types_t(nCurrentActiveResist);
 }
 
+float CWeaponMedigun::GetHealRate()
+{
+	const float HealRate = m_pWeaponInfo()->GetWeaponData(GetWeaponID() == TF_WEAPON_MEDIGUN).m_nDamage;
+	SDK::AttribHookValue(HealRate, "mult_medigun_healrate", this);
+	return HealRate;
+}
 
+float CWeaponMedigun::GetHealRateForTarget(CTFPlayer* Target)
+{
+	const float HealRate = GetHealRate();
+	SDK::AttribHookValue(HealRate, "mult_medigun_healrate", this);
+	SDK::AttribHookValue(HealRate, "mult_health_fromhealers", Target);
+	return HealRate;
+}
+
+int CWeaponMedigun::GetMaxBuffedHealthForTarget(CTFPlayer* Target)
+{
+	const auto MaxHealth = Target->GetMaxHealth();
+
+	constexpr auto OverhealMultiplier = 1.0f;
+	SDK::AttribHookValue(OverhealMultiplier, "overheal_amount", this);
+
+	constexpr auto PatientMultiplier = 1.0f;
+	SDK::AttribHookValue(PatientMultiplier, "mult_patient_overheal_penalty", Target);
+
+	const auto BaseBonus = MaxHealth * (H::ConVars.FindVar("tf_max_health_boost")->GetFloat() - 1.0f);
+	const auto BoostMax = MaxHealth + BaseBonus * OverhealMultiplier * PatientMultiplier;
+
+	return static_cast<int>(BoostMax) / 5 * 5;
+}
 
 int CTFPipebombLauncher::GetDetonateType()
 {

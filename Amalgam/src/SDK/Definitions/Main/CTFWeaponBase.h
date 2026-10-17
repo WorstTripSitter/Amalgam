@@ -280,6 +280,11 @@ public:
 	int GetMedigunType();
 	MedigunChargeTypes GetChargeType();
 	medigun_resist_types_t GetResistType();
+
+	float GetHealRate();
+	float GetHealRateForTarget(CTFPlayer* Target);
+
+	int GetMaxBuffedHealthForTarget(CTFPlayer* Target);
 };
 
 class CTFPipebombLauncher : public CTFWeaponBase
