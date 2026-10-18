@@ -76,7 +76,7 @@ static inline std::vector<Target_t> GetTargets(CTFPlayer* pLocal, CTFWeaponBase*
 				if (Vars::Aimbot::Healing::DangerPriority.Value)
 				{
 					// danger is expected damage / health; quantize so near-equal targets don't flicker
-					float flDanger = F::AutoHeal.GetDanger(pEntity->As<CTFPlayer>());
+					float flDanger = F::AutoHeal.GetDanger(pLocal, pWeapon->As<CWeaponMedigun>(), pEntity->As<CTFPlayer>());
 					iPriority += std::clamp(int(flDanger * 4.f), 0, iMaxDangerPriority);
 					if (pWeapon->As<CWeaponMedigun>()->m_hHealingTarget().Get() == pEntity)
 						iPriority += 1;

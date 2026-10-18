@@ -457,21 +457,22 @@ void CAutoHeal::GetDangers(CTFPlayer* pTarget, bool bVaccinator, float& flBullet
 		if (pSentry->m_hEnemy().Get() != pTarget && pSentry->m_hAutoAimTarget().Get() != pTarget || !pSentry->m_iAmmoShells())
 			continue;
 
+		// tf_sentrygun_damage 16 / tf_sentrygun_mini_damage 8, 0.2s at level 1 else 0.1s, x0.5 wrangled, x0.75 mini, x0.4 crit canteen builder
+		auto pBuilder = pSentry->m_hBuilder()->As<CTFPlayer>();
 		float flDistance = pSentry->GetCenter().DistTo(vTargetCenter);
-		float flDamage = 19.f, flMult = pTarget->IsMarked() ? 1.36f : 1.f;
-		float flFireRate;
-		switch (pSentry->m_bMiniBuilding() ? 0 : pSentry->m_iUpgradeLevel())
+		float flDamage = pSentry->m_bMiniBuilding() ? 8.f : 16.f, flMult = pTarget->IsMarked() ? 1.36f : 1.f;
+		float flFireRate = pSentry->m_iUpgradeLevel() == 1 ? 0.2f : 0.1f;
+		if (pBuilder)
 		{
-		case 0:
-			flDamage /= 2;
-			flFireRate = pSentry->m_bPlayerControlled() ? 0.09f : 0.18f;
-			break;
-		case 1:
-			flFireRate = pSentry->m_bPlayerControlled() ? 0.135f : 0.225f;
-			break;
-		default:
-			flFireRate = pSentry->m_bPlayerControlled() ? 0.09f : 0.135f;
+			flDamage = SDK::AttribHookValue(flDamage, "mult_engy_sentry_damage", pBuilder);
+			flFireRate = SDK::AttribHookValue(flFireRate, "mult_sentry_firerate", pBuilder);
+			if (pBuilder->InCond(TF_COND_CRITBOOSTED_USER_BUFF))
+				flFireRate *= 0.4f;
 		}
+		if (pSentry->m_bPlayerControlled())
+			flFireRate *= 0.5f;
+		if (pSentry->m_bMiniBuilding() && !pSentry->m_bDisposableBuilding())
+			flFireRate *= 0.75f;
 		int iShotsWithinTime = GetShotsWithinTime(0, flFireRate, 1.f /*flLatency*/);
 		flMult = flBulletResist > 0.f ? 1.f - flBulletResist : flMult + flBulletResist;
 		flDamage *= flMult * flBulletTaken;
@@ -562,8 +563,8 @@ void CAutoHeal::GetDangers(CTFPlayer* pTarget, bool bVaccinator, float& flBullet
 	}
 
 	// player_hurt only records damage to us or our heal target
-	bool bRecorded = pTarget->entindex() == I::EngineClient->GetLocalPlayer() || pTarget == m_pWeapon->m_hHealingTarget().Get();
-	if (bRecorded && m_flDamagedTime > 0.f)
+	bool bRecorded = m_flDamagedTime > 0.f && (pTarget->entindex() == I::EngineClient->GetLocalPlayer() || pTarget == m_pWeapon->m_hHealingTarget().Get());
+	if (bRecorded)
 	{
 		switch (m_iDamagedType)
 		{
@@ -577,7 +578,7 @@ void CAutoHeal::GetDangers(CTFPlayer* pTarget, bool bVaccinator, float& flBullet
 			flFireDanger += m_flDamagedDPS / iPlayerHealth;
 		}
 	}
-	else if (pTarget->InCond(TF_COND_BURNING) || pTarget->InCond(TF_COND_BURNING_PYRO))
+	if (!(bRecorded && m_iDamagedType == MEDIGUN_FIRE_RESIST) && (pTarget->InCond(TF_COND_BURNING) || pTarget->InCond(TF_COND_BURNING_PYRO)))
 		flFireDanger += 8.f * flBurnTaken / iPlayerHealth;
 
 	// ignore resistances we are already charged with, else scale
@@ -682,11 +683,12 @@ void CAutoHeal::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd)
 	m_flDamagedTime = std::max(m_flDamagedTime - TICK_INTERVAL, 0.f);
 }
 
-float CAutoHeal::GetDanger(CTFPlayer* pTarget)
+float CAutoHeal::GetDanger(CTFPlayer* pLocal, CWeaponMedigun* pWeapon, CTFPlayer* pTarget)
 {
-	if (!m_pLocal || !m_pWeapon || !pTarget)
+	if (!pLocal || !pWeapon || !pTarget)
 		return 0.f;
 
+	m_pLocal = pLocal, m_pWeapon = pWeapon;
 	float flBulletDanger = 0.f, flBlastDanger = 0.f, flFireDanger = 0.f;
 	GetDangers(pTarget, false, flBulletDanger, flBlastDanger, flFireDanger);
 	return flBulletDanger + flBlastDanger + flFireDanger;
@@ -698,12 +700,11 @@ void CAutoHeal::Event(IGameEvent* pEvent, uint32_t uHash)
 	{
 	case FNV1A::Hash32Const("player_hurt"):
 	{
-		if (!Vars::Aimbot::Healing::AutoVaccinator.Value)
-			return;
-
 		//auto pLocal = H::Entities.GetLocal();
 		auto pWeapon = H::Entities.GetWeapon()->As<CWeaponMedigun>();
-		if (/*!pLocal ||*/ !pWeapon || pWeapon->GetWeaponID() != TF_WEAPON_MEDIGUN || pWeapon->GetMedigunType() != MEDIGUN_RESIST)
+		if (/*!pLocal ||*/ !pWeapon || pWeapon->GetWeaponID() != TF_WEAPON_MEDIGUN)
+			return;
+		if (!Vars::Aimbot::Healing::DangerPriority.Value && (!Vars::Aimbot::Healing::AutoVaccinator.Value || pWeapon->GetMedigunType() != MEDIGUN_RESIST))
 			return;
 
 		int iVictim = I::EngineClient->GetPlayerForUserID(pEvent->GetInt("userid"));
@@ -774,7 +775,7 @@ void CAutoHeal::Event(IGameEvent* pEvent, uint32_t uHash)
 				m_flDamagedDPS = iDamage / flFireRate;
 			}
 			break;
-		case EWeaponType::MELEE:
+		default:
 			return;
 		}
 		if (Vars::Aimbot::Healing::AutoVaccinatorFlamethrowerDamageOnly.Value && (iWeaponID != TF_WEAPON_FLAMETHROWER || m_iDamagedType != MEDIGUN_FIRE_RESIST))
