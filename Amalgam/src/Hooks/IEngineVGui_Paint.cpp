@@ -43,9 +43,6 @@ MAKE_HOOK(IEngineVGui_Paint, U::Memory.GetVirtual(I::EngineVGui, 14), void,
 			F::OffscreenArrows.Draw(pLocal);
 			F::Aimbot.Draw(pLocal);
 
-#ifdef DEBUG_VACCINATOR
-			F::AutoHeal.Draw(pLocal);
-#endif
 			F::NoSpreadHitscan.Draw(pLocal);
 			F::PlayerConditions.Draw(pLocal);
 			F::Backtrack.Draw(pLocal);

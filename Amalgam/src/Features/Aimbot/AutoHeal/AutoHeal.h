@@ -1,7 +1,6 @@
 #pragma once
-#include "../../../SDK/SDK.h"
 
-//#define DEBUG_VACCINATOR
+#include "../../../SDK/SDK.h"
 
 class CAutoHeal
 {
@@ -26,16 +25,9 @@ private:
 	float m_flDamagedDPS = -1;
 	float m_flDamagedTime = 0.f;
 
-#ifdef DEBUG_VACCINATOR
-	std::array<float, MEDIGUN_NUM_RESISTS> vResistDangers = {};
-#endif
-
 public:
 	void Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd);
 	void Event(IGameEvent* pEvent, uint32_t uHash);
-#ifdef DEBUG_VACCINATOR
-	void Draw(CTFPlayer* pLocal);
-#endif
 
 	float m_flAutoSwitchExpireTime = 0.f;
 	int m_iAutoSwitch = 0;
