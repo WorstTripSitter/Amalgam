@@ -260,6 +260,8 @@ void CAutoHeal::GetDangers(CTFPlayer* pTarget, bool bVaccinator, float& flBullet
 
 	float flLatency = F::Backtrack.GetReal();
 	int iPlayerHealth = std::max(pTarget->m_iHealth(), 1);
+	auto pGameRules = I::TFGameRules();
+	bool bMvM = pGameRules && pGameRules->m_bPlayingMannVsMachine();
 
 	// victim-side damage multipliers (MvM resistance upgrades, Fists of Steel, Darwin's, etc), crit resist only scales the crit bonus
 	float flAllTaken = SDK::AttribHookValue(1.f, "mult_dmgtaken", pTarget);
@@ -291,6 +293,20 @@ void CAutoHeal::GetDangers(CTFPlayer* pTarget, bool bVaccinator, float& flBullet
 	{
 		auto pPlayer = pEntity->As<CTFPlayer>();
 		int iIndex = pPlayer->entindex();
+		if (bMvM && H::Entities.GetModel(iIndex) == FNV1A::Hash32Const("models/bots/demo/bot_sentry_buster.mdl"))
+		{
+			// taunts for 2s then deals 4x max(maxhealth, health) blast damage to anything within 300u with line of fire
+			bool bDetonating = pPlayer->InCond(TF_COND_TAUNTING);
+			Vec3 vBusterOrigin = bDetonating ? pPlayer->m_vecOrigin() : PredictOrigin(pPlayer->m_vecOrigin(), pPlayer->m_vecVelocity(), flLatency + 0.5f, true, pPlayer->m_vecMins(), pPlayer->m_vecMaxs(), pPlayer->SolidMask());
+			Vec3 vBusterCenter = vBusterOrigin + pPlayer->GetOffset() / 2;
+			if (vBusterCenter.DistTo(vTargetCenter) < 300.f && TraceToEntity(pTarget, pPlayer, vTargetCenter, vBusterCenter))
+			{
+				float flMult = flBlastResist > 0.f ? 1.f - flBlastResist : 1.f + flBlastResist;
+				float flDamage = 4.f * std::max(pTarget->GetMaxHealth(), pTarget->m_iHealth()) * flMult * flBlastTaken;
+				flBlastDanger += flDamage / iPlayerHealth * (bDetonating ? 1.f : 0.5f);
+			}
+			continue;
+		}
 		if (ShouldIgnore(pPlayer, m_pLocal, m_pWeapon) || !pPlayer->CanAttack(true, false))
 			continue;
 
