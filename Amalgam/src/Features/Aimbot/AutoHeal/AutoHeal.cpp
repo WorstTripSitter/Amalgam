@@ -263,13 +263,15 @@ void CAutoHeal::GetDangers(CTFPlayer* pTarget, bool bVaccinator, float& flBullet
 
 	// victim-side damage multipliers (MvM resistance upgrades, Fists of Steel, Darwin's, etc), crit resist only scales the crit bonus
 	float flAllTaken = SDK::AttribHookValue(1.f, "mult_dmgtaken", pTarget);
-	if (auto pTargetWeapon = pTarget->m_hActiveWeapon()->As<CTFWeaponBase>())
-		flAllTaken *= SDK::AttribHookValue(1.f, "dmg_from_ranged", pTargetWeapon);
 	if (pTarget->m_iClass() == TF_CLASS_HEAVY && pTarget->InCond(TF_COND_AIMING) && iPlayerHealth <= pTarget->GetMaxHealth() / 2)
 		flAllTaken *= SDK::AttribHookValue(1.f, "spunup_damage_resistance", pTarget);
-	float flBulletTaken = SDK::AttribHookValue(1.f, "mult_dmgtaken_from_bullets", pTarget) * flAllTaken;
-	float flBlastTaken = SDK::AttribHookValue(1.f, "mult_dmgtaken_from_explosions", pTarget) * flAllTaken;
-	float flFireTaken = SDK::AttribHookValue(1.f, "mult_dmgtaken_from_fire", pTarget) * flAllTaken;
+	float flRangedTaken = flAllTaken; // dmg_from_ranged covers bullet/blast/ignite but not afterburn (DMG_BURN)
+	if (auto pTargetWeapon = pTarget->m_hActiveWeapon()->As<CTFWeaponBase>())
+		flRangedTaken *= SDK::AttribHookValue(1.f, "dmg_from_ranged", pTargetWeapon);
+	float flBulletTaken = SDK::AttribHookValue(1.f, "mult_dmgtaken_from_bullets", pTarget) * flRangedTaken;
+	float flBlastTaken = SDK::AttribHookValue(1.f, "mult_dmgtaken_from_explosions", pTarget) * flRangedTaken;
+	float flFireTaken = SDK::AttribHookValue(1.f, "mult_dmgtaken_from_fire", pTarget) * flRangedTaken;
+	float flBurnTaken = SDK::AttribHookValue(1.f, "mult_dmgtaken_from_fire", pTarget) * flAllTaken;
 	float flCritMult = 1.f + 2.f * SDK::AttribHookValue(1.f, "mult_dmgtaken_from_crit", pTarget);
 	auto fGetTaken = [&](int iType)
 	{
@@ -560,7 +562,7 @@ void CAutoHeal::GetDangers(CTFPlayer* pTarget, bool bVaccinator, float& flBullet
 		}
 	}
 	else if (pTarget->InCond(TF_COND_BURNING) || pTarget->InCond(TF_COND_BURNING_PYRO))
-		flFireDanger += 8.f * flFireTaken / iPlayerHealth;
+		flFireDanger += 8.f * flBurnTaken / iPlayerHealth;
 
 	// ignore resistances we are already charged with, else scale
 	if (flBulletResist >= (bVaccinator ? 0.75f : 1.f))
