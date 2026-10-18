@@ -260,6 +260,27 @@ void CAutoHeal::GetDangers(CTFPlayer* pTarget, bool bVaccinator, float& flBullet
 
 	float flLatency = F::Backtrack.GetReal();
 	int iPlayerHealth = std::max(pTarget->m_iHealth(), 1);
+
+	// victim-side damage multipliers (MvM resistance upgrades, Fists of Steel, Darwin's, etc), crit resist only scales the crit bonus
+	float flAllTaken = SDK::AttribHookValue(1.f, "mult_dmgtaken", pTarget);
+	if (auto pTargetWeapon = pTarget->m_hActiveWeapon()->As<CTFWeaponBase>())
+		flAllTaken *= SDK::AttribHookValue(1.f, "dmg_from_ranged", pTargetWeapon);
+	if (pTarget->m_iClass() == TF_CLASS_HEAVY && pTarget->InCond(TF_COND_AIMING) && iPlayerHealth <= pTarget->GetMaxHealth() / 2)
+		flAllTaken *= SDK::AttribHookValue(1.f, "spunup_damage_resistance", pTarget);
+	float flBulletTaken = SDK::AttribHookValue(1.f, "mult_dmgtaken_from_bullets", pTarget) * flAllTaken;
+	float flBlastTaken = SDK::AttribHookValue(1.f, "mult_dmgtaken_from_explosions", pTarget) * flAllTaken;
+	float flFireTaken = SDK::AttribHookValue(1.f, "mult_dmgtaken_from_fire", pTarget) * flAllTaken;
+	float flCritMult = 1.f + 2.f * SDK::AttribHookValue(1.f, "mult_dmgtaken_from_crit", pTarget);
+	auto fGetTaken = [&](int iType)
+	{
+		switch (iType)
+		{
+		case MEDIGUN_BULLET_RESIST: return flBulletTaken;
+		case MEDIGUN_BLAST_RESIST: return flBlastTaken;
+		case MEDIGUN_FIRE_RESIST: return flFireTaken;
+		}
+		return 1.f;
+	};
 	Vec3 vTargetOrigin = PredictOrigin(pTarget->m_vecOrigin(), pTarget->m_vecVelocity(), pTarget->entindex() != I::EngineClient->GetLocalPlayer() ? flLatency : 0.f, true, pTarget->m_vecMins(), pTarget->m_vecMaxs(), pTarget->SolidMask());
 	Vec3 vTargetCenter = vTargetOrigin + pTarget->GetOffset() / 2;
 	Vec3 vTargetEye = vTargetOrigin + pTarget->GetViewOffset();
@@ -292,7 +313,7 @@ void CAutoHeal::GetDangers(CTFPlayer* pTarget, bool bVaccinator, float& flBullet
 		bool bCrits = pPlayer->IsCritBoosted() || F::CritHack.WeaponCanCrit(pWeapon);
 		bool bMinicrits = pPlayer->IsMiniCritBoosted() || pTarget->IsMarked();
 		float flDistance = vPlayerEye.DistTo(vTargetCenter);
-		float flDamage, flMult = bCrits ? 3.f : bMinicrits ? 1.36f : 1.f;
+		float flDamage, flMult = bCrits ? flCritMult : bMinicrits ? 1.36f : 1.f;
 		float flFireRate = std::min(pWeapon->GetFireRate(), 1.f);
 		int iBulletCount = pWeapon->GetBulletsPerShot();
 		int iShotsWithinTime = GetShotsWithinTime(nWeaponID, flFireRate, flLatency + TICKS_TO_TIME(bCheater ? 22 : 0));
@@ -321,7 +342,7 @@ void CAutoHeal::GetDangers(CTFPlayer* pTarget, bool bVaccinator, float& flBullet
 				if (bClassic && flDamage != 150.f)
 					flDamage = SDK::AttribHookValue(flDamage, "bodyshot_damage_modify", pWeapon);
 				else
-					flMult = std::max(bHeadshot || bClassic ? 3.f : bPiss ? 1.36f : 1.f, flMult);
+					flMult = std::max(bHeadshot || bClassic ? flCritMult : bPiss ? 1.36f : 1.f, flMult);
 				break;
 			}
 			if (SDK::AttribHookValue(0, "sniper_only_fire_zoomed", pWeapon) && !bZoom)
@@ -329,11 +350,11 @@ void CAutoHeal::GetDangers(CTFPlayer* pTarget, bool bVaccinator, float& flBullet
 			else if (bClassic || !bZoom)
 				flDamage = SDK::AttribHookValue(50.f, "bodyshot_damage_modify", pWeapon);
 			else
-				flDamage = 150.f, flMult = flMult = std::max(bHeadshot || bClassic ? 3.f : bPiss ? 1.36f : 1.f, flMult);
+				flDamage = 150.f, flMult = flMult = std::max(bHeadshot || bClassic ? flCritMult : bPiss ? 1.36f : 1.f, flMult);
 			break;
 		}
 		case TF_WEAPON_COMPOUND_BOW:
-			flDamage = 120.f, flMult = 3.f;
+			flDamage = 120.f, flMult = flCritMult;
 			break;
 		case TF_WEAPON_FLAMETHROWER:
 			flDamage = 80.f * flFireRate;
@@ -347,7 +368,7 @@ void CAutoHeal::GetDangers(CTFPlayer* pTarget, bool bVaccinator, float& flBullet
 		case EWeaponType::HITSCAN:
 		{
 			flMult = flBulletResist > 0.f ? 1.f - flBulletResist : flMult + flBulletResist;
-			flDamage *= flMult * (pWeapon ? SDK::AttribHookValue(1, "mult_dmg", pWeapon) : 1);
+			flDamage *= flMult * flBulletTaken * (pWeapon ? SDK::AttribHookValue(1, "mult_dmg", pWeapon) : 1);
 
 			float flSpread = std::clamp(pWeapon->GetWeaponSpread(), 0.001f, 1.f);
 			float flMappedCount = Math::RemapVal(flDistance, 20 / flSpread, 100 / flSpread, iBulletCount, 1);
@@ -389,7 +410,7 @@ void CAutoHeal::GetDangers(CTFPlayer* pTarget, bool bVaccinator, float& flBullet
 			case MEDIGUN_BLAST_RESIST: flMult = flBlastResist > 0.f ? 1.f - flBlastResist : flMult + flBlastResist; break;
 			case MEDIGUN_FIRE_RESIST: flMult = flFireResist > 0.f ? 1.f - flFireResist : flMult + flFireResist; break;
 			}
-			flDamage *= flMult * (pWeapon ? SDK::AttribHookValue(1, "mult_dmg", pWeapon) : 1);
+			flDamage *= flMult * fGetTaken(iType) * (pWeapon ? SDK::AttribHookValue(1, "mult_dmg", pWeapon) : 1);
 
 			float flRadius = tProjInfo.m_flVelocity * flLatency + F::AimbotProjectile.GetSplashRadius(pWeapon, pPlayer) + pTarget->GetSize().Length() / 2;
 			float flDamageInLatency = flDamage * iBulletCount * iShotsWithinTime;
@@ -435,7 +456,7 @@ void CAutoHeal::GetDangers(CTFPlayer* pTarget, bool bVaccinator, float& flBullet
 		}
 		int iShotsWithinTime = GetShotsWithinTime(0, flFireRate, 1.f /*flLatency*/);
 		flMult = flBulletResist > 0.f ? 1.f - flBulletResist : flMult + flBulletResist;
-		flDamage *= flMult;
+		flDamage *= flMult * flBulletTaken;
 
 		float flDamageInLatency = flDamage * iShotsWithinTime;
 		float flDamageDanger = flDamageInLatency / iPlayerHealth;
@@ -490,6 +511,8 @@ void CAutoHeal::GetDangers(CTFPlayer* pTarget, bool bVaccinator, float& flBullet
 
 		int iType = MEDIGUN_BLAST_RESIST;
 		float flMult = GetMult(pEntity, pWeapon, pTarget);
+		if (flMult == 3.f)
+			flMult = flCritMult;
 		float flDamage = GetDamage(pEntity, pOwner, pWeapon, pTarget, flMult, vProjectileOrigin, &iType);
 		switch (iType)
 		{
@@ -497,7 +520,7 @@ void CAutoHeal::GetDangers(CTFPlayer* pTarget, bool bVaccinator, float& flBullet
 		case MEDIGUN_BLAST_RESIST: flMult = flBlastResist > 0.f ? 1.f - flBlastResist : flMult + flBlastResist; break;
 		case MEDIGUN_FIRE_RESIST: flMult = flFireResist > 0.f ? 1.f - flFireResist : flMult + flFireResist; break;
 		}
-		flDamage *= flMult;
+		flDamage *= flMult * fGetTaken(iType);
 
 		flRadius += vVelocity.Length() * flLatency + pTarget->GetSize().Length() / 2;
 		float flDamageDanger = flDamage / iPlayerHealth;
@@ -537,7 +560,7 @@ void CAutoHeal::GetDangers(CTFPlayer* pTarget, bool bVaccinator, float& flBullet
 		}
 	}
 	else if (pTarget->InCond(TF_COND_BURNING) || pTarget->InCond(TF_COND_BURNING_PYRO))
-		flFireDanger += 8.f / iPlayerHealth;
+		flFireDanger += 8.f * flFireTaken / iPlayerHealth;
 
 	// ignore resistances we are already charged with, else scale
 	if (flBulletResist >= (bVaccinator ? 0.75f : 1.f))
