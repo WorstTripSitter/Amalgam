@@ -7,8 +7,7 @@ class CAutoHeal
 private:
 	void AutoHeal(CUserCmd* pCmd);
 	void ActivateOnVoice(CUserCmd* pCmd);
-	void AutoVaccinator(CUserCmd* pCmd);
-	void AutoUber(CUserCmd* pCmd);
+	void AutoCharge(CUserCmd* pCmd);
 	void ComputeDangers(CTFPlayer* pTarget, float& flBulletDanger, float& flBlastDanger, float& flFireDanger, float& flMeleeDanger);
 	void GetDangers(CTFPlayer* pTarget, bool bVaccinator, float& flBulletDanger, float& flBlastDanger, float& flFireDanger, float* pMeleeDanger = nullptr);
 	void SwapResistType(CUserCmd* pCmd, int iType);

@@ -683,67 +683,21 @@ void CAutoHeal::ActivateResistType(CUserCmd* pCmd, int iType)
 		pCmd->buttons |= IN_ATTACK2;
 }
 
-void CAutoHeal::AutoVaccinator(CUserCmd* pCmd)
+void CAutoHeal::AutoCharge(CUserCmd* pCmd)
 {
-	if (!Vars::Aimbot::Healing::AutoVaccinator.Value || m_pWeapon->GetMedigunType() != MEDIGUN_RESIST)
-		return;
-
-	if (m_iResistType == -1)
-		m_iResistType = m_pWeapon->GetResistType();
-
-	std::array<float, MEDIGUN_NUM_RESISTS> vResistDangers = {
-		0.f, 0.f, 0.f
-	};
-
-	std::vector<CTFPlayer*> vTargets = { m_pLocal };
-	if (auto pTarget = m_pWeapon->m_hHealingTarget()->As<CTFPlayer>(); pTarget &&
-		(Vars::Aimbot::Healing::HealPriority.Value != Vars::Aimbot::Healing::HealPriorityEnum::FriendsOnly
-		|| H::Entities.IsFriend(pTarget->entindex()) || H::Entities.InParty(pTarget->entindex())))
-		vTargets.push_back(pTarget);
-
-	for (auto pTarget : vTargets)
-		GetDangers(pTarget, true, vResistDangers[MEDIGUN_BULLET_RESIST], vResistDangers[MEDIGUN_BLAST_RESIST], vResistDangers[MEDIGUN_FIRE_RESIST]);
-
-	int iTargetResist; float flTargetDanger = std::numeric_limits<float>::lowest();
-	for (int iResist = MEDIGUN_BULLET_RESIST; iResist < MEDIGUN_NUM_RESISTS; iResist++)
-	{
-		if (float flDanger = vResistDangers[iResist]; flTargetDanger < flDanger)
-			iTargetResist = iResist, flTargetDanger = flDanger;
-	}
-	if (flTargetDanger)
-		SwapResistType(pCmd, iTargetResist);
-	if (flTargetDanger >= 1.f)
-		ActivateResistType(pCmd, iTargetResist);
-
-	if (m_bPreventResistSwap)
-		pCmd->buttons &= ~IN_RELOAD;
-	if (m_bPreventResistCharge)
-		pCmd->buttons &= ~IN_ATTACK2;
-	if (pCmd->buttons & IN_RELOAD && !(G::LastUserCmd->buttons & IN_RELOAD))
-	{
-		m_iResistType = (m_iResistType + 1) % 3;
-		m_flSwapTime = I::GlobalVars->curtime + F::Backtrack.GetReal(MAX_FLOWS, false) * 1.5f + 0.1f;
-	}
-	if (m_flSwapTime < I::GlobalVars->curtime)
-		m_iResistType = m_pWeapon->GetResistType();
-	m_flChargeLevel = m_pWeapon->m_flChargeLevel();
-}
-
-void CAutoHeal::AutoUber(CUserCmd* pCmd)
-{
-	// key off the charge type like the game does, set_weapon_mode alone doesn't say what the charge is
-	int iType = m_pWeapon->GetChargeType();
-	if (!Vars::Aimbot::Healing::AutoUber.Value || m_pWeapon->GetMedigunType() == MEDIGUN_RESIST
-		|| iType != MEDIGUN_CHARGE_INVULN && iType != MEDIGUN_CHARGE_CRITICALBOOST && iType != MEDIGUN_CHARGE_MEGAHEAL
-		|| m_pWeapon->m_flChargeLevel() < 1.f || m_pWeapon->m_bChargeRelease() || !m_pLocal->CanAttack(true, true))
+	if (!Vars::Aimbot::Healing::AutoCharge.Value)
 	{
 		m_iUberDangerTicks = 0;
 		return;
 	}
 
+	bool bResist = m_pWeapon->GetMedigunType() == MEDIGUN_RESIST;
+	int iChargeType = m_pWeapon->GetChargeType(); // what a pop actually does, set_weapon_mode alone doesn't say
+	if (bResist && m_iResistType == -1)
+		m_iResistType = m_pWeapon->GetResistType();
+
 	auto pGameRules = I::TFGameRules();
-	if (pGameRules && (pGameRules->m_bInSetup() || pGameRules->m_iRoundState() != GR_STATE_RND_RUNNING))
-		return;
+	bool bRoundRunning = !pGameRules || !pGameRules->m_bInSetup() && pGameRules->m_iRoundState() == GR_STATE_RND_RUNNING;
 	bool bMvM = pGameRules && pGameRules->m_bPlayingMannVsMachine();
 
 	auto pPatient = m_pWeapon->m_hHealingTarget()->As<CTFPlayer>();
@@ -751,20 +705,26 @@ void CAutoHeal::AutoUber(CUserCmd* pCmd)
 		&& !H::Entities.IsFriend(pPatient->entindex()) && !H::Entities.InParty(pPatient->entindex()))
 		pPatient = nullptr;
 
-	// expected damage / health, channels we already resist with a deployed bubble don't count (bVaccinator zeroes them)
-	auto fGetDanger = [&](CTFPlayer* pTarget)
+	// expected damage / health per channel, channels we already resist with a deployed bubble don't count (bVaccinator zeroes them)
+	auto fGetDangers = [&](CTFPlayer* pTarget, std::array<float, MEDIGUN_NUM_RESISTS>* pChannels = nullptr)
 	{
 		float flBullet = 0.f, flBlast = 0.f, flFire = 0.f, flMelee = 0.f;
 		GetDangers(pTarget, true, flBullet, flBlast, flFire, &flMelee);
+		if (pChannels)
+		{
+			(*pChannels)[MEDIGUN_BULLET_RESIST] = std::max((*pChannels)[MEDIGUN_BULLET_RESIST], flBullet);
+			(*pChannels)[MEDIGUN_BLAST_RESIST] = std::max((*pChannels)[MEDIGUN_BLAST_RESIST], flBlast);
+			(*pChannels)[MEDIGUN_FIRE_RESIST] = std::max((*pChannels)[MEDIGUN_FIRE_RESIST], flFire);
+		}
 		return flBullet + flBlast + flFire + flMelee;
 	};
 	bool bRecentlyHurt = m_flDamagedTime > 0.f; // player_hurt on us or our patient within the last second
 
-	float flDangerThreshold = Vars::Aimbot::Healing::AutoUberDanger.Value / 100.f;
-	float flHealthThreshold = Vars::Aimbot::Healing::AutoUberHealth.Value / 100.f;
-	if (bMvM)
+	float flDangerThreshold = Vars::Aimbot::Healing::AutoChargeDanger.Value / 100.f;
+	float flHealthThreshold = Vars::Aimbot::Healing::AutoChargeHealth.Value / 100.f;
+	if (bMvM && !bResist)
 	{
-		// hold the charge for the push unless a giant or tank is actually on the field
+		// hold a full charge for the push unless a giant or tank is actually on the field, chunks regenerate fast enough not to care
 		bool bPush = false;
 		for (auto pEntity : H::Entities.GetGroup(EntityEnum::PlayerEnemy))
 		{
@@ -786,11 +746,59 @@ void CAutoHeal::AutoUber(CUserCmd* pCmd)
 			flDangerThreshold *= 1.5f;
 	}
 
-	// kritzkrieg: nobody is protected, so pop when our patient can hurt something and we aren't about to die
-	if (iType == MEDIGUN_CHARGE_CRITICALBOOST)
+	auto fLowHealth = [&](CTFPlayer* pTarget)
+	{
+		return pTarget->m_iHealth() < 25 || bRecentlyHurt && pTarget->m_iHealth() <= pTarget->GetMaxHealth() * flHealthThreshold;
+	};
+
+	// vaccinator: keep the resist on whatever is hurting us most, pop a chunk when it gets serious
+	if (bResist)
+	{
+		std::array<float, MEDIGUN_NUM_RESISTS> vResistDangers = { 0.f, 0.f, 0.f };
+		bool bLowHealth = false;
+		fGetDangers(m_pLocal, &vResistDangers), bLowHealth |= !m_pLocal->IsInvulnerable() && fLowHealth(m_pLocal);
+		if (pPatient)
+			fGetDangers(pPatient, &vResistDangers), bLowHealth |= !pPatient->IsInvulnerable() && fLowHealth(pPatient);
+
+		int iTargetResist = MEDIGUN_BULLET_RESIST; float flTargetDanger = std::numeric_limits<float>::lowest();
+		for (int iResist = MEDIGUN_BULLET_RESIST; iResist < MEDIGUN_NUM_RESISTS; iResist++)
+		{
+			if (float flDanger = vResistDangers[iResist]; flTargetDanger < flDanger)
+				iTargetResist = iResist, flTargetDanger = flDanger;
+		}
+		if (flTargetDanger)
+			SwapResistType(pCmd, iTargetResist);
+		if (bRoundRunning && m_pLocal->CanAttack(true, true) && (flTargetDanger >= flDangerThreshold || bLowHealth && flTargetDanger > 0.f))
+			ActivateResistType(pCmd, iTargetResist);
+
+		if (m_bPreventResistSwap)
+			pCmd->buttons &= ~IN_RELOAD;
+		if (m_bPreventResistCharge)
+			pCmd->buttons &= ~IN_ATTACK2;
+		if (pCmd->buttons & IN_RELOAD && !(G::LastUserCmd->buttons & IN_RELOAD))
+		{
+			m_iResistType = (m_iResistType + 1) % 3;
+			m_flSwapTime = I::GlobalVars->curtime + F::Backtrack.GetReal(MAX_FLOWS, false) * 1.5f + 0.1f;
+		}
+		if (m_flSwapTime < I::GlobalVars->curtime)
+			m_iResistType = m_pWeapon->GetResistType();
+		m_flChargeLevel = m_pWeapon->m_flChargeLevel();
+		return;
+	}
+
+	// full charges: uber, kritz, megaheal
+	if (iChargeType != MEDIGUN_CHARGE_INVULN && iChargeType != MEDIGUN_CHARGE_CRITICALBOOST && iChargeType != MEDIGUN_CHARGE_MEGAHEAL
+		|| m_pWeapon->m_flChargeLevel() < 1.f || m_pWeapon->m_bChargeRelease() || !bRoundRunning || !m_pLocal->CanAttack(true, true))
 	{
 		m_iUberDangerTicks = 0;
-		if (!pPatient || pPatient->IsInvulnerable() || pPatient->IsCritBoosted() || fGetDanger(m_pLocal) >= flDangerThreshold)
+		return;
+	}
+
+	// kritzkrieg: nobody is protected, so pop when our patient can hurt something and we aren't about to die
+	if (iChargeType == MEDIGUN_CHARGE_CRITICALBOOST)
+	{
+		m_iUberDangerTicks = 0;
+		if (!pPatient || pPatient->IsInvulnerable() || pPatient->IsCritBoosted() || fGetDangers(m_pLocal) >= flDangerThreshold)
 			return;
 		switch (pPatient->m_iClass())
 		{
@@ -817,16 +825,14 @@ void CAutoHeal::AutoUber(CUserCmd* pCmd)
 		return;
 	}
 
-	// stock / quick-fix
+	// uber / quick-fix
 	auto fShouldPop = [&](CTFPlayer* pTarget, bool& bPanic)
 	{
-		if (!pTarget || pTarget->IsInvulnerable() || iType == MEDIGUN_CHARGE_MEGAHEAL && pTarget->InCond(TF_COND_MEGAHEAL))
+		if (!pTarget || pTarget->IsInvulnerable() || iChargeType == MEDIGUN_CHARGE_MEGAHEAL && pTarget->InCond(TF_COND_MEGAHEAL))
 			return false;
-		if (pTarget->m_iHealth() < 25)
+		if (fLowHealth(pTarget))
 			return bPanic = true;
-		if (bRecentlyHurt && pTarget->m_iHealth() <= pTarget->GetMaxHealth() * flHealthThreshold)
-			return bPanic = true;
-		float flDanger = fGetDanger(pTarget);
+		float flDanger = fGetDangers(pTarget);
 		if (flDanger >= 3.f) // lethal and then some (sentry buster, crit rocket on a hurt patient), don't wait
 			return bPanic = true;
 		return flDanger >= flDangerThreshold;
@@ -841,7 +847,7 @@ void CAutoHeal::AutoUber(CUserCmd* pCmd)
 	if (!bPop && Vars::Aimbot::Healing::DangerPriority.Value)
 	{
 		float flRange = (m_pWeapon->m_pWeaponInfo() ? m_pWeapon->m_pWeaponInfo()->GetWeaponData(TF_WEAPON_PRIMARY_MODE).m_flRange : 450.f) * 1.2f; // GetStickRange
-		float flPatientDanger = pPatient ? fGetDanger(pPatient) : 0.f;
+		float flPatientDanger = pPatient ? fGetDangers(pPatient) : 0.f;
 		Vec3 vEyePos = m_pLocal->GetShootPos();
 		for (auto pEntity : H::Entities.GetGroup(EntityEnum::PlayerTeam))
 		{
@@ -854,7 +860,7 @@ void CAutoHeal::AutoUber(CUserCmd* pCmd)
 			if (!SDK::VisPosWorld(m_pLocal, pTeammate, vEyePos, pTeammate->GetCenter()))
 				continue;
 
-			float flDanger = fGetDanger(pTeammate);
+			float flDanger = fGetDangers(pTeammate);
 			if (flDanger >= flDangerThreshold && flDanger > flPatientDanger + 0.5f)
 			{
 				bPop = true;
@@ -903,8 +909,7 @@ void CAutoHeal::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd)
 	m_pLocal = pLocal, m_pWeapon = pWeapon->As<CWeaponMedigun>();
 	AutoHeal(pCmd);
 	ActivateOnVoice(pCmd); m_mMedicCallers.clear();
-	AutoVaccinator(pCmd);
-	AutoUber(pCmd);
+	AutoCharge(pCmd);
 	m_flDamagedTime = std::max(m_flDamagedTime - TICK_INTERVAL, 0.f);
 }
 
@@ -929,8 +934,7 @@ void CAutoHeal::Event(IGameEvent* pEvent, uint32_t uHash)
 		auto pWeapon = H::Entities.GetWeapon()->As<CWeaponMedigun>();
 		if (/*!pLocal ||*/ !pWeapon || pWeapon->GetWeaponID() != TF_WEAPON_MEDIGUN)
 			return;
-		if (!Vars::Aimbot::Healing::DangerPriority.Value && !Vars::Aimbot::Healing::AutoUber.Value
-			&& (!Vars::Aimbot::Healing::AutoVaccinator.Value || pWeapon->GetMedigunType() != MEDIGUN_RESIST))
+		if (!Vars::Aimbot::Healing::DangerPriority.Value && !Vars::Aimbot::Healing::AutoCharge.Value)
 			return;
 
 		int iVictim = I::EngineClient->GetPlayerForUserID(pEvent->GetInt("userid"));
