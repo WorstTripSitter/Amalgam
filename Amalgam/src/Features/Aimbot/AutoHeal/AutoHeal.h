@@ -28,6 +28,7 @@ private:
 	float m_flDamagedDPS = -1;
 	float m_flDamagedTime = 0.f;
 
+	int m_iUberDangerTicks = 0;
 	std::unordered_map<int, std::array<float, 4>> m_mDangerCache = {};
 	int m_iDangerCacheTick = -1;
 

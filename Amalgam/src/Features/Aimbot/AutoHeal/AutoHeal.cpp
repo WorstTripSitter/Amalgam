@@ -358,8 +358,19 @@ void CAutoHeal::ComputeDangers(CTFPlayer* pTarget, float& flBulletDanger, float&
 		float flDamage, flMult = bCrits ? flCritMult : bMinicrits ? 1.36f : 1.f;
 		if (eWeaponType == EWeaponType::MELEE)
 		{
-			// not resistable, only feeds heal priority. knives assumed to backstab
-			flDamage = nWeaponID == TF_WEAPON_KNIFE ? 2.f * iPlayerHealth : pWeapon->GetDamage() * flMult * flMeleeTaken;
+			// not resistable, only feeds heal priority. knife only counts as a backstab from behind (CTFKnife::IsBehindAndFacingTarget)
+			bool bBackstab = false;
+			if (nWeaponID == TF_WEAPON_KNIFE)
+			{
+				Vec3 vTargetForward, vSpyForward;
+				Math::AngleVectors(H::Entities.GetEyeAngles(pTarget->entindex()), &vTargetForward);
+				Math::AngleVectors(H::Entities.GetEyeAngles(iIndex), &vSpyForward);
+				vTargetForward.z = vSpyForward.z = 0.f;
+				Vec3 vToTarget = vTargetOrigin - vPlayerOrigin; vToTarget.z = 0.f;
+				vTargetForward.Normalize(), vSpyForward.Normalize(), vToTarget.Normalize();
+				bBackstab = vToTarget.Dot(vTargetForward) > 0.f && vToTarget.Dot(vSpyForward) > 0.5f && vTargetForward.Dot(vSpyForward) > -0.3f;
+			}
+			flDamage = bBackstab ? 2.f * iPlayerHealth : pWeapon->GetDamage() * flMult * flMeleeTaken;
 			flMeleeDanger += flDamage / iPlayerHealth;
 			continue;
 		}
@@ -719,40 +730,140 @@ void CAutoHeal::AutoVaccinator(CUserCmd* pCmd)
 
 void CAutoHeal::AutoUber(CUserCmd* pCmd)
 {
-	if (!Vars::Aimbot::Healing::AutoUber.Value || m_pWeapon->GetMedigunType() != MEDIGUN_STANDARD
+	int iType = m_pWeapon->GetMedigunType();
+	if (!Vars::Aimbot::Healing::AutoUber.Value || iType == MEDIGUN_RESIST
 		|| m_pWeapon->m_flChargeLevel() < 1.f || m_pWeapon->m_bChargeRelease() || !m_pLocal->CanAttack(true, true))
+	{
+		m_iUberDangerTicks = 0;
 		return;
+	}
 
 	auto pGameRules = I::TFGameRules();
 	if (pGameRules && (pGameRules->m_bInSetup() || pGameRules->m_iRoundState() != GR_STATE_RND_RUNNING))
 		return;
+	bool bMvM = pGameRules && pGameRules->m_bPlayingMannVsMachine();
 
-	// pop when we or our patient are about to take more than the threshold of our remaining health, or are already low
+	auto pPatient = m_pWeapon->m_hHealingTarget()->As<CTFPlayer>();
+	if (pPatient && Vars::Aimbot::Healing::HealPriority.Value == Vars::Aimbot::Healing::HealPriorityEnum::FriendsOnly
+		&& !H::Entities.IsFriend(pPatient->entindex()) && !H::Entities.InParty(pPatient->entindex()))
+		pPatient = nullptr;
+
+	// expected damage / health, channels we already resist with a deployed bubble don't count (bVaccinator zeroes them)
+	auto fGetDanger = [&](CTFPlayer* pTarget)
+	{
+		float flBullet = 0.f, flBlast = 0.f, flFire = 0.f, flMelee = 0.f;
+		GetDangers(pTarget, true, flBullet, flBlast, flFire, &flMelee);
+		return flBullet + flBlast + flFire + flMelee;
+	};
+	bool bRecentlyHurt = m_flDamagedTime > 0.f; // player_hurt on us or our patient within the last second
+
 	float flDangerThreshold = Vars::Aimbot::Healing::AutoUberDanger.Value / 100.f;
 	float flHealthThreshold = Vars::Aimbot::Healing::AutoUberHealth.Value / 100.f;
-	auto fShouldPop = [&](CTFPlayer* pTarget)
+	if (bMvM)
 	{
-		if (pTarget->IsInvulnerable())
+		// hold the charge for the push unless a giant or tank is actually on the field
+		bool bPush = false;
+		for (auto pEntity : H::Entities.GetGroup(EntityEnum::PlayerEnemy))
+		{
+			if (pEntity->As<CTFPlayer>()->m_bIsMiniBoss() && pEntity->As<CTFPlayer>()->IsAlive())
+			{
+				bPush = true;
+				break;
+			}
+		}
+		for (auto pEntity : H::Entities.GetGroup(EntityEnum::WorldNPC))
+		{
+			if (pEntity->GetClassID() == ETFClassID::CTFTankBoss)
+			{
+				bPush = true;
+				break;
+			}
+		}
+		if (!bPush)
+			flDangerThreshold *= 1.5f;
+	}
+
+	// kritzkrieg: nobody is protected, so pop when our patient can hurt something and we aren't about to die
+	if (iType == MEDIGUN_UBER)
+	{
+		m_iUberDangerTicks = 0;
+		if (!pPatient || pPatient->IsInvulnerable() || pPatient->IsCritBoosted() || fGetDanger(m_pLocal) >= flDangerThreshold)
+			return;
+		switch (pPatient->m_iClass())
+		{
+		case TF_CLASS_SOLDIER: case TF_CLASS_DEMOMAN: case TF_CLASS_HEAVY: case TF_CLASS_PYRO: case TF_CLASS_SCOUT: break;
+		default: return;
+		}
+		if (!pPatient->CanAttack(true, false))
+			return;
+
+		Vec3 vPatientEye = pPatient->GetEyePosition();
+		for (auto pEntity : H::Entities.GetGroup(EntityEnum::PlayerEnemy))
+		{
+			auto pEnemy = pEntity->As<CTFPlayer>();
+			if (!pEnemy->IsAlive() || pEnemy->IsInvulnerable() || pEnemy->m_vecOrigin().DistTo(pPatient->m_vecOrigin()) > 1500.f)
+				continue;
+			if (Math::CalcFov(H::Entities.GetEyeAngles(pPatient->entindex()), Math::CalcAngle(vPatientEye, pEnemy->GetCenter())) > 60.f)
+				continue;
+			if (SDK::VisPosWorld(pPatient, pEnemy, vPatientEye, pEnemy->GetCenter()))
+			{
+				pCmd->buttons |= IN_ATTACK2;
+				return;
+			}
+		}
+		return;
+	}
+
+	// stock / quick-fix
+	auto fShouldPop = [&](CTFPlayer* pTarget, bool& bPanic)
+	{
+		if (!pTarget || pTarget->IsInvulnerable() || iType == MEDIGUN_QUICKFIX && pTarget->InCond(TF_COND_MEGAHEAL))
 			return false;
-		if (pTarget->m_iHealth() < 25 || pTarget->m_iHealth() <= pTarget->GetMaxHealth() * flHealthThreshold)
-			return true;
-		return GetDanger(m_pLocal, m_pWeapon, pTarget) >= flDangerThreshold;
+		if (pTarget->m_iHealth() < 25)
+			return bPanic = true;
+		if (bRecentlyHurt && pTarget->m_iHealth() <= pTarget->GetMaxHealth() * flHealthThreshold)
+			return bPanic = true;
+		float flDanger = fGetDanger(pTarget);
+		if (flDanger >= 3.f) // lethal and then some (sentry buster, crit rocket on a hurt patient), don't wait
+			return bPanic = true;
+		return flDanger >= flDangerThreshold;
 	};
 
-	std::vector<CTFPlayer*> vTargets = { m_pLocal };
-	if (auto pTarget = m_pWeapon->m_hHealingTarget()->As<CTFPlayer>(); pTarget &&
-		(Vars::Aimbot::Healing::HealPriority.Value != Vars::Aimbot::Healing::HealPriorityEnum::FriendsOnly
-		|| H::Entities.IsFriend(pTarget->entindex()) || H::Entities.InParty(pTarget->entindex())))
-		vTargets.push_back(pTarget);
+	bool bPop = false, bPanic = false;
+	bPop |= fShouldPop(m_pLocal, bPanic);
+	if (pPatient)
+		bPop |= fShouldPop(pPatient, bPanic);
 
-	for (auto pTarget : vTargets)
+	// a teammate the beam is about to swing to (danger priority switches at +0.5 over the current patient) also counts
+	if (!bPop && Vars::Aimbot::Healing::DangerPriority.Value)
 	{
-		if (fShouldPop(pTarget))
+		float flRange = (m_pWeapon->m_pWeaponInfo() ? m_pWeapon->m_pWeaponInfo()->GetWeaponData(TF_WEAPON_PRIMARY_MODE).m_flRange : 450.f) * 1.2f; // GetStickRange
+		float flPatientDanger = pPatient ? fGetDanger(pPatient) : 0.f;
+		Vec3 vEyePos = m_pLocal->GetShootPos();
+		for (auto pEntity : H::Entities.GetGroup(EntityEnum::PlayerTeam))
 		{
-			pCmd->buttons |= IN_ATTACK2;
-			return;
+			auto pTeammate = pEntity->As<CTFPlayer>();
+			if (pTeammate == m_pLocal || pTeammate == pPatient || !pTeammate->IsAlive() || pTeammate->IsInvulnerable()
+				|| pTeammate->m_vecOrigin().DistTo(m_pLocal->m_vecOrigin()) > flRange
+				|| Vars::Aimbot::Healing::HealPriority.Value == Vars::Aimbot::Healing::HealPriorityEnum::FriendsOnly
+				&& !H::Entities.IsFriend(pTeammate->entindex()) && !H::Entities.InParty(pTeammate->entindex()))
+				continue;
+			if (!SDK::VisPosWorld(m_pLocal, pTeammate, vEyePos, pTeammate->GetCenter()))
+				continue;
+
+			float flDanger = fGetDanger(pTeammate);
+			if (flDanger >= flDangerThreshold && flDanger > flPatientDanger + 0.5f)
+			{
+				bPop = true;
+				break;
+			}
 		}
 	}
+
+	// a single tick of danger is usually a projectile passing by, ask for a few in a row unless it's a panic
+	m_iUberDangerTicks = bPop ? m_iUberDangerTicks + 1 : 0;
+	if (bPanic || m_iUberDangerTicks >= 3)
+		pCmd->buttons |= IN_ATTACK2;
 }
 
 void CAutoHeal::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd)
@@ -794,7 +905,8 @@ void CAutoHeal::Event(IGameEvent* pEvent, uint32_t uHash)
 		auto pWeapon = H::Entities.GetWeapon()->As<CWeaponMedigun>();
 		if (/*!pLocal ||*/ !pWeapon || pWeapon->GetWeaponID() != TF_WEAPON_MEDIGUN)
 			return;
-		if (!Vars::Aimbot::Healing::DangerPriority.Value && (!Vars::Aimbot::Healing::AutoVaccinator.Value || pWeapon->GetMedigunType() != MEDIGUN_RESIST))
+		if (!Vars::Aimbot::Healing::DangerPriority.Value && !Vars::Aimbot::Healing::AutoUber.Value
+			&& (!Vars::Aimbot::Healing::AutoVaccinator.Value || pWeapon->GetMedigunType() != MEDIGUN_RESIST))
 			return;
 
 		int iVictim = I::EngineClient->GetPlayerForUserID(pEvent->GetInt("userid"));
