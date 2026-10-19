@@ -347,7 +347,8 @@ void CAutoHeal::ComputeDangers(CTFPlayer* pTarget, float& flBulletDanger, float&
 		bool bCheater = F::PlayerUtils.HasTag(iIndex, F::PlayerUtils.TagToIndex(CHEATER_TAG));
 		bool bZoom = pPlayer->InCond(TF_COND_ZOOMED);
 		float flFOV = Math::CalcFov(H::Entities.GetEyeAngles(iIndex) + H::Entities.GetDeltaAngles(iIndex), Math::CalcAngle(vPlayerEye, bZoom ? vTargetEye : vTargetCenter));
-		bool bFOV = bCheater || flFOV < (bZoom ? 10 : eWeaponType == EWeaponType::HITSCAN ? 30 : 90);
+		bool bAirborneMelee = eWeaponType == EWeaponType::MELEE && pPlayer->InCond(TF_COND_BLASTJUMPING);
+		bool bFOV = bCheater || bAirborneMelee || flFOV < (bZoom ? 10 : eWeaponType == EWeaponType::HITSCAN ? 30 : 90);
 		if (!bFOV)
 			continue;
 
@@ -368,9 +369,19 @@ void CAutoHeal::ComputeDangers(CTFPlayer* pTarget, float& flBulletDanger, float&
 			break;
 		case EWeaponType::MELEE: // CTFWeaponBaseMelee::GetSwingRange, plus what they can close in a quarter second
 		{
+			constexpr float flWindow = 0.25f;
 			float flReach = pPlayer->InCond(TF_COND_SHIELD_CHARGE) ? 128.f : SDK::AttribHookValue(0, "is_a_sword", pWeapon) ? 72.f : 48.f;
 			flReach *= pPlayer->m_flModelScale();
-			flMaxDistance = flReach + pTarget->GetSize().Length() / 2 + pPlayer->m_vecVelocity().Length() * 0.25f;
+			if (bAirborneMelee)
+			{
+				// where they land matters, not where they are: follow the arc for the window
+				Vec3 vLanding = pPlayer->m_vecOrigin() + pPlayer->m_vecVelocity() * flWindow;
+				vLanding.z -= 0.5f * SDK::GetGravity() * flWindow * flWindow;
+				flDistance = std::min(flDistance, vLanding.DistTo(vTargetOrigin));
+				flMaxDistance = flReach + pTarget->GetSize().Length() / 2 + pPlayer->m_vecVelocity().Length() * flWindow;
+			}
+			else // a stationary heavy still closes 48u, use what they can run not what they are running
+				flMaxDistance = flReach + pTarget->GetSize().Length() / 2 + std::max(pPlayer->CalculateMaxSpeed(), pPlayer->m_vecVelocity().Length()) * flWindow;
 		}
 		}
 		if (flDistance > flMaxDistance || !TraceToEntity(pTarget, pPlayer, vTargetCenter, vPlayerEye))
@@ -393,6 +404,11 @@ void CAutoHeal::ComputeDangers(CTFPlayer* pTarget, float& flBulletDanger, float&
 				vTargetForward.Normalize(), vSpyForward.Normalize(), vToTarget.Normalize();
 				bBackstab = vToTarget.Dot(vTargetForward) > 0.f && vToTarget.Dot(vSpyForward) > 0.5f && vTargetForward.Dot(vSpyForward) > -0.3f;
 			}
+			// market gardener: guaranteed crit while blast jumping (crit_while_airborne). demo charge: crit at <= 40 meter, minicrit at <= 75
+			if (bAirborneMelee && SDK::AttribHookValue(0, "crit_while_airborne", pWeapon))
+				flMult = flCritMult;
+			else if (pPlayer->InCond(TF_COND_SHIELD_CHARGE))
+				flMult = std::max(flMult, pPlayer->m_flChargeMeter() <= 40.f ? flCritMult : pPlayer->m_flChargeMeter() <= 75.f ? 1.36f : 1.f);
 			flDamage = bBackstab ? 2.f * iPlayerHealth : pWeapon->GetDamage() * flMult * flMeleeTaken;
 			flMeleeDanger += flDamage / iPlayerHealth;
 			continue;
