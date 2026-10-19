@@ -248,12 +248,8 @@ static inline float GetMult(CBaseEntity* pProjectile, CTFWeaponBase* pWeapon, CT
 	return flReturn;
 }
 
-void CAutoHeal::GetDangers(CTFPlayer* pTarget, bool bVaccinator, float& flBulletOut, float& flBlastOut, float& flFireOut)
+void CAutoHeal::ComputeDangers(CTFPlayer* pTarget, float& flBulletDanger, float& flBlastDanger, float& flFireDanger, float& flMeleeDanger)
 {
-	if (pTarget->IsInvulnerable())
-		return;
-
-	float flBulletDanger = 0.f, flBlastDanger = 0.f, flFireDanger = 0.f;
 	float flBulletResist = pTarget->InCond(TF_COND_BULLET_IMMUNE) ? 1.f : pTarget->InCond(TF_COND_MEDIGUN_UBER_BULLET_RESIST) ? 0.75f : pTarget->InCond(TF_COND_MEDIGUN_SMALL_BULLET_RESIST) ? -0.1f : 0.f;
 	float flBlastResist = pTarget->InCond(TF_COND_BLAST_IMMUNE) ? 1.f : pTarget->InCond(TF_COND_MEDIGUN_UBER_BLAST_RESIST) ? 0.75f : pTarget->InCond(TF_COND_MEDIGUN_SMALL_BLAST_RESIST) ? -0.1f : 0.f;
 	float flFireResist = pTarget->InCond(TF_COND_FIRE_IMMUNE) ? 1.f : pTarget->InCond(TF_COND_MEDIGUN_UBER_FIRE_RESIST) ? 0.75f : pTarget->InCond(TF_COND_MEDIGUN_SMALL_FIRE_RESIST) ? -0.1f : 0.f;
@@ -268,8 +264,12 @@ void CAutoHeal::GetDangers(CTFPlayer* pTarget, bool bVaccinator, float& flBullet
 	if (pTarget->m_iClass() == TF_CLASS_HEAVY && pTarget->InCond(TF_COND_AIMING) && iPlayerHealth <= pTarget->GetMaxHealth() / 2)
 		flAllTaken *= SDK::AttribHookValue(1.f, "spunup_damage_resistance", pTarget);
 	float flRangedTaken = flAllTaken; // dmg_from_ranged covers bullet/blast/ignite but not afterburn (DMG_BURN)
+	float flMeleeTaken = SDK::AttribHookValue(1.f, "mult_dmgtaken_from_melee", pTarget) * flAllTaken;
 	if (auto pTargetWeapon = pTarget->m_hActiveWeapon()->As<CTFWeaponBase>())
+	{
 		flRangedTaken *= SDK::AttribHookValue(1.f, "dmg_from_ranged", pTargetWeapon);
+		flMeleeTaken *= SDK::AttribHookValue(1.f, "dmg_from_melee", pTargetWeapon);
+	}
 	float flBulletTaken = SDK::AttribHookValue(1.f, "mult_dmgtaken_from_bullets", pTarget) * flRangedTaken;
 	float flBlastTaken = SDK::AttribHookValue(1.f, "mult_dmgtaken_from_explosions", pTarget) * flRangedTaken;
 	float flFireTaken = SDK::AttribHookValue(1.f, "mult_dmgtaken_from_fire", pTarget) * flRangedTaken;
@@ -313,7 +313,7 @@ void CAutoHeal::GetDangers(CTFPlayer* pTarget, bool bVaccinator, float& flBullet
 		auto pWeapon = pPlayer->m_hActiveWeapon()->As<CTFWeaponBase>();
 		int nWeaponID = pWeapon ? pWeapon->GetWeaponID() : 0;
 		auto eWeaponType = SDK::GetWeaponType(pWeapon);
-		if (eWeaponType == EWeaponType::UNKNOWN || eWeaponType == EWeaponType::MELEE // if we ever want to port this over to auto uber or something, handle melee
+		if (eWeaponType == EWeaponType::UNKNOWN
 			|| nWeaponID == TF_WEAPON_DRG_POMSON || nWeaponID == TF_WEAPON_PIPEBOMBLAUNCHER
 			|| nWeaponID == TF_WEAPON_MINIGUN && !pPlayer->InCond(TF_COND_AIMING))
 			continue;
@@ -325,13 +325,40 @@ void CAutoHeal::GetDangers(CTFPlayer* pTarget, bool bVaccinator, float& flBullet
 		bool bZoom = pPlayer->InCond(TF_COND_ZOOMED);
 		float flFOV = Math::CalcFov(H::Entities.GetEyeAngles(iIndex) + H::Entities.GetDeltaAngles(iIndex), Math::CalcAngle(vPlayerEye, bZoom ? vTargetEye : vTargetCenter));
 		bool bFOV = bCheater || flFOV < (bZoom ? 10 : eWeaponType == EWeaponType::HITSCAN ? 30 : 90);
-		if (!bFOV || !TraceToEntity(pTarget, pPlayer, vTargetCenter, vPlayerEye))
+		if (!bFOV)
+			continue;
+
+		// skip the traces for anyone who can't reach the target within the window anyway
+		float flDistance = vPlayerEye.DistTo(vTargetCenter);
+		float flMaxDistance = std::numeric_limits<float>::max();
+		ProjectileInfo tProjInfo = {};
+		switch (eWeaponType)
+		{
+		case EWeaponType::HITSCAN:
+			if (!bCheater)
+				flMaxDistance = 100.f / std::clamp(pWeapon->GetWeaponSpread(), 0.001f, 1.f);
+			break;
+		case EWeaponType::PROJECTILE:
+			if (!F::ProjSim.GetInfo(pPlayer, pWeapon, {}, tProjInfo, ProjSimEnum::NoRandomAngles | ProjSimEnum::MaxSpeed))
+				continue;
+			flMaxDistance = tProjInfo.m_flVelocity * flLatency + F::AimbotProjectile.GetSplashRadius(pWeapon, pPlayer) + pTarget->GetSize().Length() / 2;
+			break;
+		case EWeaponType::MELEE: // 48u swing reach plus what they can close in a quarter second
+			flMaxDistance = 48.f + pTarget->GetSize().Length() / 2 + pPlayer->m_vecVelocity().Length() * 0.25f;
+		}
+		if (flDistance > flMaxDistance || !TraceToEntity(pTarget, pPlayer, vTargetCenter, vPlayerEye))
 			continue;
 
 		bool bCrits = pPlayer->IsCritBoosted() || F::CritHack.WeaponCanCrit(pWeapon);
 		bool bMinicrits = pPlayer->IsMiniCritBoosted() || pTarget->IsMarked();
-		float flDistance = vPlayerEye.DistTo(vTargetCenter);
 		float flDamage, flMult = bCrits ? flCritMult : bMinicrits ? 1.36f : 1.f;
+		if (eWeaponType == EWeaponType::MELEE)
+		{
+			// not resistable, only feeds heal priority. knives assumed to backstab
+			flDamage = nWeaponID == TF_WEAPON_KNIFE ? 2.f * iPlayerHealth : pWeapon->GetDamage() * flMult * flMeleeTaken;
+			flMeleeDanger += flDamage / iPlayerHealth;
+			continue;
+		}
 		float flFireRate = std::min(pWeapon->GetFireRate(), 1.f);
 		int iBulletCount = pWeapon->GetBulletsPerShot();
 		int iShotsWithinTime = GetShotsWithinTime(nWeaponID, flFireRate, flLatency + TICKS_TO_TIME(bCheater ? 22 : 0));
@@ -404,10 +431,6 @@ void CAutoHeal::GetDangers(CTFPlayer* pTarget, bool bVaccinator, float& flBullet
 		}
 		case EWeaponType::PROJECTILE:
 		{
-			ProjectileInfo tProjInfo = {};
-			if (!F::ProjSim.GetInfo(pPlayer, pWeapon, {}, tProjInfo, ProjSimEnum::NoRandomAngles | ProjSimEnum::MaxSpeed))
-				continue;
-
 			int iType = MEDIGUN_BLAST_RESIST;
 			switch (nWeaponID)
 			{
@@ -430,7 +453,7 @@ void CAutoHeal::GetDangers(CTFPlayer* pTarget, bool bVaccinator, float& flBullet
 			}
 			flDamage *= flMult * fGetTaken(iType) * (pWeapon ? SDK::AttribHookValue(1, "mult_dmg", pWeapon) : 1);
 
-			float flRadius = tProjInfo.m_flVelocity * flLatency + F::AimbotProjectile.GetSplashRadius(pWeapon, pPlayer) + pTarget->GetSize().Length() / 2;
+			float flRadius = flMaxDistance;
 			float flDamageInLatency = flDamage * iBulletCount * iShotsWithinTime;
 			float flDamageDanger = flDamageInLatency / iPlayerHealth;
 			float flDistanceDanger = Math::RemapVal(flDistance, flRadius, flRadius, 1.f, 0.001f);
@@ -580,6 +603,29 @@ void CAutoHeal::GetDangers(CTFPlayer* pTarget, bool bVaccinator, float& flBullet
 	}
 	if (!(bRecorded && m_iDamagedType == MEDIGUN_FIRE_RESIST) && (pTarget->InCond(TF_COND_BURNING) || pTarget->InCond(TF_COND_BURNING_PYRO)))
 		flFireDanger += 8.f * flBurnTaken / iPlayerHealth;
+}
+
+void CAutoHeal::GetDangers(CTFPlayer* pTarget, bool bVaccinator, float& flBulletOut, float& flBlastOut, float& flFireOut, float* pMeleeOut)
+{
+	if (pTarget->IsInvulnerable())
+		return;
+
+	// the expensive part is the same for the vaccinator and heal priority, only compute it once per target per tick
+	if (m_iDangerCacheTick != I::GlobalVars->tickcount)
+	{
+		m_mDangerCache.clear();
+		m_iDangerCacheTick = I::GlobalVars->tickcount;
+	}
+	auto [it, bInserted] = m_mDangerCache.try_emplace(pTarget->entindex());
+	if (bInserted)
+		ComputeDangers(pTarget, it->second[0], it->second[1], it->second[2], it->second[3]);
+	auto [flBulletDanger, flBlastDanger, flFireDanger, flMeleeDanger] = it->second; // copy, the scaling below must not touch the cache
+	if (pMeleeOut)
+		*pMeleeOut = std::max(*pMeleeOut, flMeleeDanger);
+
+	float flBulletResist = pTarget->InCond(TF_COND_BULLET_IMMUNE) ? 1.f : pTarget->InCond(TF_COND_MEDIGUN_UBER_BULLET_RESIST) ? 0.75f : 0.f;
+	float flBlastResist = pTarget->InCond(TF_COND_BLAST_IMMUNE) ? 1.f : pTarget->InCond(TF_COND_MEDIGUN_UBER_BLAST_RESIST) ? 0.75f : 0.f;
+	float flFireResist = pTarget->InCond(TF_COND_FIRE_IMMUNE) ? 1.f : pTarget->InCond(TF_COND_MEDIGUN_UBER_FIRE_RESIST) ? 0.75f : 0.f;
 
 	// ignore resistances we are already charged with, else scale
 	if (flBulletResist >= (bVaccinator ? 0.75f : 1.f))
@@ -689,9 +735,9 @@ float CAutoHeal::GetDanger(CTFPlayer* pLocal, CWeaponMedigun* pWeapon, CTFPlayer
 		return 0.f;
 
 	m_pLocal = pLocal, m_pWeapon = pWeapon;
-	float flBulletDanger = 0.f, flBlastDanger = 0.f, flFireDanger = 0.f;
-	GetDangers(pTarget, false, flBulletDanger, flBlastDanger, flFireDanger);
-	return flBulletDanger + flBlastDanger + flFireDanger;
+	float flBulletDanger = 0.f, flBlastDanger = 0.f, flFireDanger = 0.f, flMeleeDanger = 0.f;
+	GetDangers(pTarget, false, flBulletDanger, flBlastDanger, flFireDanger, &flMeleeDanger);
+	return flBulletDanger + flBlastDanger + flFireDanger + flMeleeDanger;
 }
 
 void CAutoHeal::Event(IGameEvent* pEvent, uint32_t uHash)
