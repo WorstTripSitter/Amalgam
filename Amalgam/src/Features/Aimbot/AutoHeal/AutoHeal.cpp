@@ -731,8 +731,10 @@ void CAutoHeal::AutoVaccinator(CUserCmd* pCmd)
 
 void CAutoHeal::AutoUber(CUserCmd* pCmd)
 {
-	int iType = m_pWeapon->GetMedigunType();
-	if (!Vars::Aimbot::Healing::AutoUber.Value || iType == MEDIGUN_RESIST
+	// key off the charge type like the game does, set_weapon_mode alone doesn't say what the charge is
+	int iType = m_pWeapon->GetChargeType();
+	if (!Vars::Aimbot::Healing::AutoUber.Value || m_pWeapon->GetMedigunType() == MEDIGUN_RESIST
+		|| iType != MEDIGUN_CHARGE_INVULN && iType != MEDIGUN_CHARGE_CRITICALBOOST && iType != MEDIGUN_CHARGE_MEGAHEAL
 		|| m_pWeapon->m_flChargeLevel() < 1.f || m_pWeapon->m_bChargeRelease() || !m_pLocal->CanAttack(true, true))
 	{
 		m_iUberDangerTicks = 0;
@@ -785,7 +787,7 @@ void CAutoHeal::AutoUber(CUserCmd* pCmd)
 	}
 
 	// kritzkrieg: nobody is protected, so pop when our patient can hurt something and we aren't about to die
-	if (iType == MEDIGUN_UBER)
+	if (iType == MEDIGUN_CHARGE_CRITICALBOOST)
 	{
 		m_iUberDangerTicks = 0;
 		if (!pPatient || pPatient->IsInvulnerable() || pPatient->IsCritBoosted() || fGetDanger(m_pLocal) >= flDangerThreshold)
@@ -818,7 +820,7 @@ void CAutoHeal::AutoUber(CUserCmd* pCmd)
 	// stock / quick-fix
 	auto fShouldPop = [&](CTFPlayer* pTarget, bool& bPanic)
 	{
-		if (!pTarget || pTarget->IsInvulnerable() || iType == MEDIGUN_QUICKFIX && pTarget->InCond(TF_COND_MEGAHEAL))
+		if (!pTarget || pTarget->IsInvulnerable() || iType == MEDIGUN_CHARGE_MEGAHEAL && pTarget->InCond(TF_COND_MEGAHEAL))
 			return false;
 		if (pTarget->m_iHealth() < 25)
 			return bPanic = true;
