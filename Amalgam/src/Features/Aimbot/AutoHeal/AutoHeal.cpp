@@ -343,8 +343,12 @@ void CAutoHeal::ComputeDangers(CTFPlayer* pTarget, float& flBulletDanger, float&
 				continue;
 			flMaxDistance = tProjInfo.m_flVelocity * flLatency + F::AimbotProjectile.GetSplashRadius(pWeapon, pPlayer) + pTarget->GetSize().Length() / 2;
 			break;
-		case EWeaponType::MELEE: // 48u swing reach plus what they can close in a quarter second
-			flMaxDistance = 48.f + pTarget->GetSize().Length() / 2 + pPlayer->m_vecVelocity().Length() * 0.25f;
+		case EWeaponType::MELEE: // CTFWeaponBaseMelee::GetSwingRange, plus what they can close in a quarter second
+		{
+			float flReach = pPlayer->InCond(TF_COND_SHIELD_CHARGE) ? 128.f : SDK::AttribHookValue(0, "is_a_sword", pWeapon) ? 72.f : 48.f;
+			flReach *= pPlayer->m_flModelScale();
+			flMaxDistance = flReach + pTarget->GetSize().Length() / 2 + pPlayer->m_vecVelocity().Length() * 0.25f;
+		}
 		}
 		if (flDistance > flMaxDistance || !TraceToEntity(pTarget, pPlayer, vTargetCenter, vPlayerEye))
 			continue;
