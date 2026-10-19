@@ -78,8 +78,8 @@ static inline std::vector<Target_t> GetTargets(CTFPlayer* pLocal, CTFWeaponBase*
 					// danger is expected damage / health; quantize so near-equal targets don't flicker
 					float flDanger = F::AutoHeal.GetDanger(pLocal, pWeapon->As<CWeaponMedigun>(), pEntity->As<CTFPlayer>());
 					iPriority += std::clamp(int(flDanger * 4.f), 0, iMaxDangerPriority);
-					if (pWeapon->As<CWeaponMedigun>()->m_hHealingTarget().Get() == pEntity)
-						iPriority += 1;
+					if (pWeapon->As<CWeaponMedigun>()->m_hHealingTarget().Get() == pEntity) // stickier while ubering, moving the beam drops their invuln
+						iPriority += pWeapon->As<CWeaponMedigun>()->m_bChargeRelease() ? 2 : 1;
 				}
 			}
 			vTargets.emplace_back(pEntity, TargetEnum::Player, vPos, vAngleTo, flFOVTo, flDistTo, iPriority);

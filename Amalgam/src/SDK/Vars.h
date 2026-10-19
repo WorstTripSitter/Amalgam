@@ -413,6 +413,9 @@ NAMESPACE_BEGIN(Vars)
 				Shared = Friends | Party | Unprioritized);
 			CVar(AutoHeal, "Auto heal", false);
 			CVar(DangerPriority, "Danger priority", false);
+			CVar(AutoUber, "Auto uber", false);
+			CVar(AutoUberDanger, "Auto uber danger", 100.f, SLIDER_MIN | SLIDER_PRECISION, 25.f, 400.f, 5.f, "%g%%");
+			CVar(AutoUberHealth, "Auto uber health", 30.f, SLIDER_MIN | SLIDER_PRECISION, 0.f, 100.f, 5.f, "%g%%");
 			CVar(AutoArrow, "Auto arrow", false);
 			CVar(AutoRepair, "Auto repair", false);
 			CVar(AutoSandvich, "Auto sandvich", false);

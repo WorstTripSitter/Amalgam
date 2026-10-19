@@ -611,7 +611,8 @@ void CAutoHeal::ComputeDangers(CTFPlayer* pTarget, float& flBulletDanger, float&
 
 void CAutoHeal::GetDangers(CTFPlayer* pTarget, bool bVaccinator, float& flBulletOut, float& flBlastOut, float& flFireOut, float* pMeleeOut)
 {
-	if (pTarget->IsInvulnerable())
+	// our own uber patient keeps their danger, otherwise the beam would hop off them the moment the uber lands
+	if (pTarget->IsInvulnerable() && !(m_pWeapon->m_bChargeRelease() && pTarget == m_pWeapon->m_hHealingTarget().Get()))
 		return;
 
 	// the expensive part is the same for the vaccinator and heal priority, only compute it once per target per tick
@@ -684,7 +685,7 @@ void CAutoHeal::AutoVaccinator(CUserCmd* pCmd)
 
 	std::vector<CTFPlayer*> vTargets = { m_pLocal };
 	if (auto pTarget = m_pWeapon->m_hHealingTarget()->As<CTFPlayer>(); pTarget &&
-		(Vars::Aimbot::Healing::HealPriority.Value <= Vars::Aimbot::Healing::HealPriorityEnum::FriendsOnly
+		(Vars::Aimbot::Healing::HealPriority.Value != Vars::Aimbot::Healing::HealPriorityEnum::FriendsOnly
 		|| H::Entities.IsFriend(pTarget->entindex()) || H::Entities.InParty(pTarget->entindex())))
 		vTargets.push_back(pTarget);
 
@@ -716,6 +717,44 @@ void CAutoHeal::AutoVaccinator(CUserCmd* pCmd)
 	m_flChargeLevel = m_pWeapon->m_flChargeLevel();
 }
 
+void CAutoHeal::AutoUber(CUserCmd* pCmd)
+{
+	if (!Vars::Aimbot::Healing::AutoUber.Value || m_pWeapon->GetMedigunType() != MEDIGUN_STANDARD
+		|| m_pWeapon->m_flChargeLevel() < 1.f || m_pWeapon->m_bChargeRelease() || !m_pLocal->CanAttack(true, true))
+		return;
+
+	auto pGameRules = I::TFGameRules();
+	if (pGameRules && (pGameRules->m_bInSetup() || pGameRules->m_iRoundState() != GR_STATE_RND_RUNNING))
+		return;
+
+	// pop when we or our patient are about to take more than the threshold of our remaining health, or are already low
+	float flDangerThreshold = Vars::Aimbot::Healing::AutoUberDanger.Value / 100.f;
+	float flHealthThreshold = Vars::Aimbot::Healing::AutoUberHealth.Value / 100.f;
+	auto fShouldPop = [&](CTFPlayer* pTarget)
+	{
+		if (pTarget->IsInvulnerable())
+			return false;
+		if (pTarget->m_iHealth() < 25 || pTarget->m_iHealth() <= pTarget->GetMaxHealth() * flHealthThreshold)
+			return true;
+		return GetDanger(m_pLocal, m_pWeapon, pTarget) >= flDangerThreshold;
+	};
+
+	std::vector<CTFPlayer*> vTargets = { m_pLocal };
+	if (auto pTarget = m_pWeapon->m_hHealingTarget()->As<CTFPlayer>(); pTarget &&
+		(Vars::Aimbot::Healing::HealPriority.Value != Vars::Aimbot::Healing::HealPriorityEnum::FriendsOnly
+		|| H::Entities.IsFriend(pTarget->entindex()) || H::Entities.InParty(pTarget->entindex())))
+		vTargets.push_back(pTarget);
+
+	for (auto pTarget : vTargets)
+	{
+		if (fShouldPop(pTarget))
+		{
+			pCmd->buttons |= IN_ATTACK2;
+			return;
+		}
+	}
+}
+
 void CAutoHeal::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd)
 {
 	if (pWeapon->GetWeaponID() != TF_WEAPON_MEDIGUN)
@@ -730,6 +769,7 @@ void CAutoHeal::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd)
 	AutoHeal(pCmd);
 	ActivateOnVoice(pCmd); m_mMedicCallers.clear();
 	AutoVaccinator(pCmd);
+	AutoUber(pCmd);
 	m_flDamagedTime = std::max(m_flDamagedTime - TICK_INTERVAL, 0.f);
 }
 
