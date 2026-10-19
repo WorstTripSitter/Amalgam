@@ -23,8 +23,8 @@ std::vector<Target_t> CAimbotGlobal::ManageTargets(std::vector<Target_t>(*GetTar
 	SortTargetsPre(ValidTargets, SortMethod);
 
 	const auto PriorityIndex = GetPriorityIndex(LocalWeapon);
-	if (PriorityIndex > 0)
-		std::ranges::sort(ValidTargets, [&](const Target_t& a, const Target_t& b) -> bool { return a.m_pEntity->entindex() == PriorityIndex; });
+	if (PriorityIndex > 0) // not a strict weak ordering for sort, partition instead
+		std::ranges::stable_partition(ValidTargets, [&](const Target_t& a) -> bool { return a.m_pEntity->entindex() == PriorityIndex; });
 
 	ValidTargets.resize(std::min(static_cast<size_t>(MaxTargets), ValidTargets.size()));
 	if (PriorityIndex <= 0)
@@ -46,6 +46,8 @@ namespace HealTune
 	constexpr float FINISH_BONUS = 250.0f;
 	constexpr float FINISH_WINDOW_SECS = 1.5f;
 	constexpr float CURRENT_PATIENT_BONUS = 60.0f;
+	constexpr float DANGER_RANGE = 800.0f; // per 1.0 of expected damage / health, capped at 2.0
+	constexpr float DANGER_CAP = 2.0f;
 }
 
 static float GetClassHealWeight(int iClass)
@@ -103,7 +105,10 @@ float CAimbotGlobal::GetHealPriority(const CTFPlayer* LocalPlayer, CTFWeaponBase
 		else
 			return 0.0f;
 
-		if (Target == LocalMedigun->m_hHealingTarget().Get())
+		if (Vars::Aimbot::Healing::DangerPriority.Value && LocalMedigun)
+			Score += HealTune::DANGER_RANGE * std::min(F::AutoHeal.GetDanger(const_cast<CTFPlayer*>(LocalPlayer), LocalMedigun, Player), HealTune::DANGER_CAP);
+
+		if (LocalMedigun && Target == LocalMedigun->m_hHealingTarget().Get())
 		{
 			const auto TargetHealth = MissingHealthFraction > HealTune::HURT_DEADBAND_FRAC ? MaxHealth : MaxBuffedHealth;
 			const auto SecondsLeft = static_cast<float>(TargetHealth - CurrentHealth) / LocalMedigun->GetHealRateForTarget(Player);
@@ -160,7 +165,7 @@ void CAimbotGlobal::SortTargetsPost(std::vector<Target_t>& vTargets, int iMethod
 		break;
 	}
 
-	std::sort(vTargets.begin(), vTargets.end(), [&](const Target_t& a, const Target_t& b) -> bool
+	std::stable_sort(vTargets.begin(), vTargets.end(), [&](const Target_t& a, const Target_t& b) -> bool // keep the pre-sort order within equal priorities
 	{
 		return a.m_nPriority > b.m_nPriority;
 	});

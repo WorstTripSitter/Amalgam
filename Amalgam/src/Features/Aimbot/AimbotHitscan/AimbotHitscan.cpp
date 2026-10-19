@@ -7,6 +7,7 @@
 #include "../../Simulation/MovementSimulation/MovementSimulation.h"
 #include "../../Visuals/Visuals.h"
 #include "../../AntiCheatCompatibility/AntiCheatCompatibility.h"
+#include "../AutoHeal/AutoHeal.h"
 
 static inline std::vector<Target_t> GetTargets(CTFPlayer* pLocal, CTFWeaponBase* pWeapon)
 {
@@ -58,15 +59,27 @@ static inline std::vector<Target_t> GetTargets(CTFPlayer* pLocal, CTFWeaponBase*
 			int iPriority = F::AimbotGlobal.GetPriority(pEntity->entindex());
 			if (bTeam && bHeal)
 			{
+				// friend/team tier stays above any danger bonus
+				constexpr int iTierPriority = std::numeric_limits<int>::max() / 2;
+				constexpr int iMaxDangerPriority = 1024;
+
 				iPriority = 0;
 				switch (Vars::Aimbot::Healing::HealPriority.Value)
 				{
 				case Vars::Aimbot::Healing::HealPriorityEnum::PrioritizeFriends:
 					if (H::Entities.IsFriend(pEntity->entindex()) || H::Entities.InParty(pEntity->entindex()))
-						iPriority = std::numeric_limits<int>::max();
+						iPriority = iTierPriority;
 					break;
 				case Vars::Aimbot::Healing::HealPriorityEnum::PrioritizeTeam:
-					iPriority = std::numeric_limits<int>::max();
+					iPriority = iTierPriority;
+				}
+				if (Vars::Aimbot::Healing::DangerPriority.Value && Vars::Aimbot::General::TargetSelection.Value != Vars::Aimbot::General::TargetSelectionEnum::HealPriority)
+				{
+					// danger is expected damage / health; quantize so near-equal targets don't flicker
+					float flDanger = F::AutoHeal.GetDanger(pLocal, pWeapon->As<CWeaponMedigun>(), pEntity->As<CTFPlayer>());
+					iPriority += std::clamp(int(flDanger * 4.f), 0, iMaxDangerPriority);
+					if (pWeapon->As<CWeaponMedigun>()->m_hHealingTarget().Get() == pEntity) // stickier while ubering, moving the beam drops their invuln
+						iPriority += pWeapon->As<CWeaponMedigun>()->m_bChargeRelease() ? 2 : 1;
 				}
 			}
 			vTargets.emplace_back(pEntity, TargetEnum::Player, vPos, vAngleTo, flFOVTo, flDistTo, iPriority);

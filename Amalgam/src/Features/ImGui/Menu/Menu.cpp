@@ -231,6 +231,10 @@ void CMenu::MenuAimbot(int iTab)
 					FToggle(Vars::Aimbot::Healing::AutoSandvich, FToggleEnum::Right);
 					FToggle(Vars::Aimbot::Healing::AutoVaccinator, FToggleEnum::Left);
 					FToggle(Vars::Aimbot::Healing::ActivateOnVoice, FToggleEnum::Right);
+					FToggle(Vars::Aimbot::Healing::DangerPriority, FToggleEnum::Left);
+					FToggle(Vars::Aimbot::Healing::AutoUber, FToggleEnum::Right);
+					FSlider(Vars::Aimbot::Healing::AutoUberDanger, FSliderEnum::Left);
+					FSlider(Vars::Aimbot::Healing::AutoUberHealth, FSliderEnum::Right);
 
 					// Auto Crusader Crosbow Switch
 					{
