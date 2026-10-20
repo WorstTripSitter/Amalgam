@@ -33,55 +33,91 @@ std::vector<Target_t> CAimbotGlobal::ManageTargets(std::vector<Target_t>(*GetTar
 	return ValidTargets;
 }
 
+namespace HealTune
+{
+	constexpr float HURT_BASE = 1000.0f;
+	constexpr float HURT_RANGE = 800.0f;
+	constexpr float HURT_CLASS_TIEBREAK = 150.0f;
+	constexpr float HURT_DEADBAND_FRAC = 0.05f;
+	constexpr float LOW_HP_BONUS = 400.0f;
+	constexpr float LOW_HP_FRAC = 0.40f;
+	constexpr float OVERHEAL_BASE = 600.0f;
+	constexpr float OVERHEAL_ROOM_RANGE = 300.0f;
+	constexpr float FINISH_BONUS = 250.0f;
+	constexpr float FINISH_WINDOW_SECS = 1.5f;
+	constexpr float CURRENT_PATIENT_BONUS = 60.0f;
+}
+
+static float GetClassHealWeight(int iClass)
+{
+	switch (iClass)
+	{
+	case TF_CLASS_HEAVY: return 1.00f;
+	case TF_CLASS_DEMOMAN:      return 0.90f;
+	case TF_CLASS_SOLDIER:      return 0.85f;
+	case TF_CLASS_PYRO:         return 0.60f;
+	case TF_CLASS_SCOUT:        return 0.50f;
+	case TF_CLASS_ENGINEER:     return 0.40f;
+	case TF_CLASS_SNIPER:       return 0.35f;
+	case TF_CLASS_SPY:          return 0.30f;
+	case TF_CLASS_MEDIC:        return 0.30f;
+	default:                    return 0.25f;
+	}
+}
+
 // TODO: account for all types of healing, including rescue ranger for buildings
-float CAimbotGlobal::GetHealPriority(const CTFPlayer* LocalPlayer, const CTFWeaponBase* LocalWeapon, CBaseEntity* Target)
+float CAimbotGlobal::GetHealPriority(const CTFPlayer* LocalPlayer, CTFWeaponBase* LocalWeapon, CBaseEntity* Target)
 {
 	if (!LocalPlayer || !LocalWeapon || !Target)
 		return -1.0f;
 
+	const auto LocalMedigun = LocalWeapon->As<CWeaponMedigun>();
+	const auto IsVaccinator = LocalMedigun && LocalMedigun->GetMedigunType() == MEDIGUN_RESIST;
+
 	if (Target->IsPlayer())
 	{
 		const auto Player = Target->As<CTFPlayer>();
-		if (Player->deadflag() || Player->IsInvisible() || Player->IsAGhost())
+		if (Player->deadflag() || Player->IsAGhost() || Player->InCond(TF_COND_PHASE))
 			return -1.0f;
 
 		const auto CurrentHealth = Player->m_iHealth();
 		const auto MaxHealth = Player->GetMaxHealth();
 		const auto PlayerResource = H::Entities.GetResource();
-		const auto MaxBuffedHealth = PlayerResource->m_iMaxBuffedHealth(Player->entindex());
-		const auto HealthFraction = std::clamp(static_cast<float>(CurrentHealth) / MaxHealth, 0.0f, 1.0f + MaxBuffedHealth);
-		const auto HealthMissing = std::clamp(1.0f - HealthFraction, 0.0f, 1.0f);
+		const auto MaxBuffedHealth = LocalMedigun ? LocalMedigun->GetMaxBuffedHealthForTarget(Player) : PlayerResource->m_iMaxBuffedHealth(Player->entindex());
+		const auto MissingHealthFraction = static_cast<float>(MaxHealth - CurrentHealth) / static_cast<float>(MaxHealth);
 
-		auto Priority = powf(HealthMissing, 2.0f) * 100.0f;
+		auto Score = 0.0f;
 
-		if (HealthFraction < 0.35f)
-			Priority += 100.0f;
-
-		if (HealthFraction >= 1.0f)
+		if (MissingHealthFraction > HealTune::HURT_DEADBAND_FRAC)
 		{
-			const auto Overheal = HealthFraction - 1.0f;
-			constexpr auto PeakOverheal = 0.10f;
-			constexpr auto SlightMax = 0.25f;
-			constexpr auto PeakScore = 12.0f;
-			constexpr auto EdgeScore = 6.0f;
+			Score = HealTune::HURT_BASE + HealTune::HURT_RANGE * MissingHealthFraction + HealTune::HURT_CLASS_TIEBREAK * GetClassHealWeight(Player->m_iClass());
 
-			if (Overheal <= PeakOverheal)
-				Priority = EdgeScore + (PeakScore - EdgeScore) * (Overheal / PeakOverheal);
-			else if (Overheal <= SlightMax)
-				Priority = PeakScore - (PeakScore - EdgeScore) * ((Overheal - PeakOverheal) / (SlightMax - PeakOverheal));
-			else
-				Priority = EdgeScore * (0.5f - Overheal) / (0.5f - SlightMax);
+			if (static_cast<float>(CurrentHealth) / static_cast<float>(MaxHealth) < HealTune::LOW_HP_FRAC)
+				Score += HealTune::LOW_HP_BONUS;
+		}
+		else if (CurrentHealth < MaxBuffedHealth)
+		{
+			const auto OverhealRoom = static_cast<float>(MaxBuffedHealth - CurrentHealth) / static_cast<float>(MaxBuffedHealth - MaxHealth);
+			Score = HealTune::OVERHEAL_BASE * GetClassHealWeight(Player->m_iClass()) + HealTune::OVERHEAL_ROOM_RANGE * OverhealRoom;
+		}
+		else
+			return 0.0f;
 
-			// this may be in the wrong spot
-			if (HealthMissing > 0.0f)
-				Priority += PeakScore;
+		if (Target == LocalMedigun->m_hHealingTarget().Get())
+		{
+			const auto TargetHealth = MissingHealthFraction > HealTune::HURT_DEADBAND_FRAC ? MaxHealth : MaxBuffedHealth;
+			const auto SecondsLeft = static_cast<float>(TargetHealth - CurrentHealth) / LocalMedigun->GetHealRateForTarget(Player);
+			const auto Seconds = std::clamp(1.0f - SecondsLeft / HealTune::FINISH_WINDOW_SECS, 0.0f, 1.0f);
+
+			Score += HealTune::CURRENT_PATIENT_BONUS + HealTune::FINISH_BONUS * Seconds;
+			//Score += HealTune::FINISH_BONUS * Seconds;
 		}
 
-		return Priority;
+		return Score;
 	}
 
 	if (Target->GetClassID() == ETFClassID::CTFReviveMarker)
-		return 100000.0f;
+		return 10000000.0f;
 
 	return 0.0f;
 }
