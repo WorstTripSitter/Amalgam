@@ -660,7 +660,7 @@ float CWeaponMedigun::GetHealRateForTarget(CTFPlayer* Target)
 {
 	const float HealRate = GetHealRate();
 	SDK::AttribHookValue(HealRate, "healing_mastery", this);
-	SDK::AttribHookValue(HealRate, "mult_health_fromhealers", Target);
+	SDK::AttribHookValue(HealRate, "mult_health_fromhealers_penalty_active", Target);
 	return HealRate;
 }
 
